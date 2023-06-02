@@ -1,5 +1,4 @@
 
-#
 # ICRAR - International Centre for Radio Astronomy Research
 # (c) UWA - The University of Western Australia, 2018
 # Copyright by UWA (in the framework of the ICRAR)
@@ -15,7 +14,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# along with this program.  If not, see <httpsÏLO_FARO://www.gnu.org/licenses/>.
 #
 """Size plots"""
 
@@ -24,18 +23,32 @@ import numpy as np
 from pylab import scatter
 import pylab
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.size': 12})
+
 import common
 import utilities_statistics as us
 import pandas as pd
 import matplotlib as mpl
 from collections import OrderedDict
+from matplotlib.pyplot import cm
+import time
+import cmocean.cm as cmo
 
-
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors
+import matplotlib.patheffects as pe
 import statistics as stat
-zlist=[0,0.194738848008908]
-
-zlist = [0, 0.194738848008908, 0.909822023685613, 2.00391410007239, 3.0191633709527, 3.95972701662501, 5.02220991014863]
-#zlist = [0, 1.0, 2.00391410007239, 3.0191633709527, 3.95972701662501, 5.02220991014863, 5.96592270612165, 7.05756323172746, 8.0235605165086, 8.94312532315157, 9.95650268434316]
+import cmocean
+mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}'] 
+zlist = [0]
+zlist = [0, 0.194738848008908]
+#0.909822023685613, 2.00391410007239, 3.0191633709527, 3.95972701662501,5.02220991014863]
+#zlist = [0, 0.909822023685613, 2.00391410007239, 3.0191633709527, 3.95972701662501,5.02220991014863, 5.96592270612165, 7.05756323172746, 8.0235605165086, 8.94312532315157, 9.95650268434316]
 ##################################
 #Constants
 RExp     = 1.67
@@ -53,11 +66,11 @@ Lsun = 3.828 * 10**26 #W
 msun = -26.74
 
 def prepare_data(hdf5_data, seds, seds_bands, seds_bc, index, LFs_dust, obsdir):
-
-    (h0, volh, mdisk, mbulge, sfr_disk, sfr_burst, typ,mgas_metals_bulge, mgas_metals_disk,mgas_bulge,mgas_disk,rgas_disk,rstar_disk,matom_disk,mgas_metals_disk,mmol_disk) = hdf5_data
+    
+    (h0, volh, mdisk, mbulge, sfr_disk, sfr_burst, typ,mgas_metals_bulge, mgas_metals_disk,mgas_bulge,mgas_disk,rgas_disk,rstar_disk,matom_disk,mmol_disk,galaxy_id) = hdf5_data
     bin_it = functools.partial(us.wmedians, xbins=xmf)
 
-    lir_disk = seds[0]
+    lir_disk = seds[0] 
     lir_bulge = seds[1]
     lir_total = seds[2] #total IR luminosity in units of Lsun
 
@@ -69,20 +82,27 @@ def prepare_data(hdf5_data, seds, seds_bands, seds_bc, index, LFs_dust, obsdir):
 
     
     Teff = Tbc * lir_cont_bc[0] + Tdiff * (1 - lir_cont_bc[0]) #check if fraction
-
-    #luminosity weight dust temperature
+    
+    #luminosity with dust temperature
 
     lir_total_W = lir_total[0] * Lsun  #units of W
     seds_disk = seds_bands[0]
     seds_bulge = seds_bands[1]
     seds_total = seds_bands[2] 
-     
+    lir_disk_w = lir_disk[0] * Lsun #units of W
+    lir_bulge_w = lir_bulge[0] * Lsun #units of W
+    
+    lir_bc_disk = seds_bc[0]    
+    lir_dust_disk = seds_bands[0]
+    lir_ism_disk = (1 - np.array(lir_bc_disk)) * np.array(lir_disk[0], dtype=np.float64)
+    lir_bc_disk = lir_bc_disk * Lsun #W
+    lir_ism_disk = lir_ism_disk*Lsun
+    
+
+    
     band_14 = seds_total[12,:] #the absolute magnitude of the 1.4 GHz band
     band_30 = seds_total[13,:] #the absolute magnitude of the 3.0 GHz band
-    print("seds_total")
-    print(print(seds_total))
-    print("This is lenght of seds total")
-    print(len(seds_total))
+
 
     L1p4radio = seds_total[12,:]
     #compute luminosity function
@@ -96,714 +116,651 @@ def prepare_data(hdf5_data, seds, seds_bands, seds_bc, index, LFs_dust, obsdir):
     ind = np.where((lir_total > 1e6) & (lir_total < 1e20))
     lir_selected = lir_total[ind]
     lradio_selected = L1p4radio[ind] 
-    print(lir_selected.shape, lradio_selected.shape)
+   # print(lir_selected.shape, lradio_selected.shape)
     meds_radio = bin_it(x=lir_selected, y=lradio_selected)
   
-    return(volh, h0, band_14, band_30, lir_total_W,Teff)
 
-def radio_convert(h0, zlist,seds_lir_lst,hdf5_lir_lst,seds_lir_bc_lst,seds_bands_lst, lir_total_W_lst):
+    print("THis is lir_ism_disk")
+    print(lir_ism_disk)
+    return(volh, h0, band_14, band_30, lir_total_W,Teff,lir_disk_w,lir_bulge_w,lir_bc_disk[0],lir_ism_disk[0])
     
-    flux_lstlst = []
-    qir_lstlst = []
-    lir_total_lstlst = []
-    
-    qir_med_lst = []
-    flux_med_lst = []
-    lir_med_lst = []
-    
-    dist_mpc = 10 #distance in  pc
-    d = 3.08567758128*10**17 #distance in m
-    
-    for z in range(len(zlist)):
-        
-        stellar_mass_lst = []
-        stellar_mass_lst = [a+b for a,b in zip(hdf5_lir_lst[z][2],hdf5_lir_lst[z][3])]
-        stellar_mass_lst = np.array(stellar_mass_lst)
-        ind0 = np.where(stellar_mass_lst != 0)
-        stellar_mass_lst = stellar_mass_lst[ind0]
-        flux_lst = []
-        
-        for i in seds_bands_lst[z][2][9:16]: #iterates over different redshift (z), total liuminosity (index 2 of this list) and the 1.4GHz frequency (11 index)
-            flux = 10**((i+48.6)/(-2.5)) * (4*np.pi*(d * 100)**2) / 1e7 #flux in W/Hz
-            flux_lst.append(flux)
-        
-        qir_lst = [np.log10(a/(3.75*10**12))-np.log10(b) for a,b in zip(lir_total_W_lst[z], flux_lst[3])] #qir
-     #   print("This is qir_lst")
-     #   print(qir_lst[:4])
-     #   print("THis is the length of qir_lst",len(qir_lst))
-        qir_lst = np.array(qir_lst,dtype=np.float64)
-        flux_lst = np.array(flux_lst,dtype=np.float64)
-        
-        lir_total = np.array(lir_total_W_lst[z], dtype=np.float64)
-        ind109 = np.where(lir_total > 10**7 * Lsun)
-        lir_total = lir_total[ind109]
-        qir_lst = qir_lst[ind109]
-        flux_lst = flux_lst[3][ind109]
-        stellar_mass_lst = stellar_mass_lst[ind109]
-        
-        ind108 = np.where(stellar_mass_lst > 0)
-        
-        lir_total = lir_total[ind108]
-        qir_lst = qir_lst[ind108]
-        flux_lst = flux_lst[ind108]
-        
-        
-        indinf = np.where(qir_lst != np.inf)
-        
-        lir_total = lir_total[indinf]
-        qir_lst = qir_lst[indinf]
-        flux_lst = flux_lst[indinf]
-        
-        
-        
-        
-        qir_med = np.median(qir_lst)
-        flux_med = np.median(flux_lst)
-        lir_med = np.median(lir_total)
-        
-        qir_lstlst.append(qir_lst)
-        flux_lstlst.append(flux_lst)
-        lir_total_lstlst.append(lir_total)
-        
-        qir_med_lst.append(qir_med)
-        flux_med_lst.append(flux_med)
-        lir_med_lst.append(lir_med)
-        
-        
-        
-    qir_bress, bress_rad_lum, bress_lir_total = bressan_model(seds_nodust_lst,seds_bands_lst,hdf5_lir_lst,lir_total_W_lst,h0,zlist)
-    z4 = np.linspace(0,4,endpoint = True)
-    delhaize4 = (2.88)*(1+z4)**-0.19
-    delhaize_upper4 = (2.88+0.03)*(1+z4)**(-0.19+0.01)
-    delhair_lower4 = (2.88-0.03)*(1+z4)**(-0.19-0.01)
-    z10 = np.linspace(4,10,endpoint= True)
-    delhaize10 = (2.88)*(1+z10)**-0.19
-    delhaize_upper10 = (2.88+0.03)*(1+z10)**(-0.19+0.01)
-    delhair_lower10 = (2.88-0.03)*(1+z10)**(-0.19-0.01)
-    
-    plt.plot(zlist,flux_med_lst,label = 'Dale')
-    plt.plot(zlist, bress_rad_lum, label = 'Bressan')
-    plt.legend()
-    plt.yscale('log')
-    plt.title('Median radio luminosity vs. z')
-    plt.xlabel('z')
-    plt.ylabel('Log median radio luminosity (W/Hz)')
-    plt.show()
-    
-    plt.plot(zlist,lir_med_lst,label = 'Dale')
-    plt.plot(zlist, bress_lir_total, label = 'Bressan')
-    plt.legend()
-    plt.yscale('log')
-    plt.title('Median lir luminosity vs. z')
-    plt.xlabel('z')
-    plt.ylabel('Log median fir luminosity (W)')
-    plt.show()
-
-    plt.plot(zlist,qir_med_lst,label = 'Dale')
-    plt.plot(zlist,qir_bress, label = 'Bressan')
-    plt.plot(z4, delhaize4, '-',color = 'purple',label = "Delhaize et al. 2017")
-    plt.fill_between(z4, delhaize_upper4, delhair_lower4, alpha=0.2, color='purple')
-    plt.xlim(-0.2,4)
-    plt.legend()
-    plt.title('Median qir vs. z')
-    plt.ylabel('Median qir')
-    plt.xlabel('z')
-    plt.show()
-    
-    print("This is median qir_lst for Dale")
-    print(qir_med_lst)
-    print("This is median qir_Lst for Bressan")
-    print(qir_bress)
-    
-    plt.plot(zlist,qir_med_lst,label = 'Dale')
-    plt.plot(zlist,qir_bress, label = 'Bressan')
-    plt.plot(z4, delhaize4, '-',color = 'purple',label = "Delhaize et al. 2017")
-    plt.plot(z10, delhaize10, ':' ,color = 'purple')
-    plt.fill_between(z4, delhaize_upper4, delhair_lower4, alpha=0.2, color='purple')
-    plt.fill_between(z10, delhaize_upper10, delhair_lower10, alpha=0.2, color='purple')
-    plt.legend()
-    plt.title('Median qir vs. z')
-    plt.ylabel('Median qir')
-    plt.xlabel('z')
-    plt.show()
-    
-    stellar_mass_lstlst = []
-    
-    for z in range(len(zlist)):
-        stellar_mass_lst = []
-        stellar_mass_lst = [a+b for a,b in zip(hdf5_lir_lst[z][2],hdf5_lir_lst[z][3])]
-        stellar_mass_lst = [i for i in stellar_mass_lst if i != 0]
-        stellar_mass_lstlst.append(np.log10(stellar_mass_lst))
-    
- #   print(len(stellar_mass_lstlst[0]))
- #   print(len(qir_lstlst[0]))
- #   
- #   for z in range(len(zlist)):
- #       ztemp = [zlist[z]] * len(qir_lstlst[z])
- #       plt.scatter(ztemp,qir_lstlst[z],c=stellar_mass_lstlst[z])
- #   cbar = plt.colorbar()
- #   plt.title("qir vs. z")
- #   plt.xlabel("z")
- #   plt.ylabel("qir")
- #   cbar.set_label("Log Stellar Mass (Solar masses)")
- #   plt.show()
-
-def dataframe(hdf5_lir_lst,zlist,seds_bands_lst,seds_lir_lst,lir_total_W_lst,seds_nodust_lst,h0,Teff_lst):
+def dataframe(hdf5_lir_lst,zlist,seds_bands_lst,seds_lir_lst,lir_total_W_lst,seds_nodust_lst,h0,Teff_lst,fields,lir_disk_w_lst,lir_bulge_w_lst,lir_bc_disk_lst,lir_ism_disk_lst):
     h0 = float(h0)
 
     dist_mpc = 10 #distance in  pc
     d = 3.08567758128*10**17 #distance in m
-    lstlst = []
-    q = 0
-    qir_lst_bress, qir_bress, bress_rad_lum_lst, bress_lir_total,freefree_lst, sync_lst, q_ionis = bressan_model(seds_nodust_lst,seds_bands_lst,hdf5_lir_lst,lir_total_W_lst,h0,zlist)
 
+    parm_lst = fields['galaxies']
+    df = pd.DataFrame(columns = parm_lst)
+
+    print('Creating Data Frame')
     for z in range(len(zlist)):
-        
-        stellar_mass_lst = []
-        stellar_mass_lst = [a+b for a,b in zip(hdf5_lir_lst[z][2],hdf5_lir_lst[z][3])]
-        mstars_disk_array = np.array(hdf5_lir_lst[z][2])
-        mstars_bulge_array = np.array(hdf5_lir_lst[z][3])
-        stellar_mass_array = np.array(stellar_mass_lst)
-        sfr_disk_array = np.array(hdf5_lir_lst[z][4])
-        sfr_burst_array = np.array(hdf5_lir_lst[z][5])
-        type_array = np.array(hdf5_lir_lst[z][6])
-        bgm_array = np.array(hdf5_lir_lst[z][7]) #bulge gas metal mass array
-        dgm_array = np.array(hdf5_lir_lst[z][8]) #disk gas metal mass array
-        mgas_bulge_array = np.array(hdf5_lir_lst[z][9]) #disk gas mass array
-        mgas_disk_array = np.array(hdf5_lir_lst[z][10])
-        r_gas_disk_array = np.array(hdf5_lir_lst[z][11]) #half radius of the gas disk [cMpc/h]
-        rstar_disk_array = np.array(hdf5_lir_lst[z][12]) # half-mass radius of the stellar disk
-        matom_disk_array = np.array(hdf5_lir_lst[z][13]) #atomic gas mass in disk
-        mgas_metals_disk_array = np.array(hdf5_lir_lst[z][14]) #mass of metals in gas in disk
-        mmol_disk_array = np.array(hdf5_lir_lst[z][15]) #molecular gas mass in disk
-        
-        ind0 = np.where(stellar_mass_array > 0)
-        stellar_mass_lst = stellar_mass_array[ind0]
-        mstars_disk_array = mstars_disk_array[ind0]
-        mstars_bulge_array = mstars_bulge_array[ind0]
-        sfr_disk_array = sfr_disk_array[ind0]
-        sfr_burst_array = sfr_burst_array[ind0]
-        type_array = type_array[ind0]
-        bgm_array = bgm_array[ind0]
-        dgm_array = dgm_array[ind0]
-        mgas_disk_array = mgas_disk_array[ind0]
-        mgas_bulge_array = mgas_bulge_array[ind0]
-        r_gas_disk_array = r_gas_disk_array[ind0]
-        rstar_disk_array = rstar_disk_array[ind0]
-        matom_disk_array = matom_disk_array[ind0]
-        mgas_metals_disk_array = mgas_metals_disk_array[ind0]
-        mmol_disk_array = mmol_disk_array[ind0]
-        
-        
-        
-        lir_total_w = lir_total_W_lst[z]
-        Teff = Teff_lst[z]
-        
-        redshift = zlist[z]
-        
-        print("This is seds_bands_lst[z][2]")
-        print(seds_bands_lst[z][2])
-        print("This is the length")
-        print(len(seds_bands_lst[z][2]))
-        flux_lst = []
-        for i in seds_bands_lst[z][2][9:16]: #iterates over different redshift (z), total liuminosity (index 2 of this list) and the 1.4GHz frequency (11 index)
+        df_temp = pd.DataFrame(columns = parm_lst)
+        mstars_tot_array = hdf5_lir_lst[z][2] + hdf5_lir_lst[z][3]
+        ind0 = np.where(mstars_tot_array > 0)
+        print("Creating data for z = ",str(round(z,2)))
+        for i in range(len(parm_lst)):
+            idx = i + 2
+            parm = parm_lst[i]
 
-            flux = 10**((i+48.6)/(-2.5)) * (4*np.pi*(d * 100)**2) / 1e7 #flux in W/Hz
-            flux_lst.append(flux)
-            
-            
+            parm_ary = np.array(hdf5_lir_lst[z][idx],dtype=np.float64)
+            parm_ary = parm_ary[ind0]
+            df_temp[parm] = list(parm_ary)
+        z_array=np.empty(len(parm_ary))
+        z_array.fill(zlist[z])
+        df_temp['z'] = z_array
 
-        dale_qir_lst = [np.log10(a/(3.75*10**12))-np.log10(b) for a,b in zip(lir_total_W_lst[z], flux_lst[3])] #qir
-        for j in range(len(mstars_disk_array)):
-            lst = []
-            mstars_disk = mstars_disk_array[j]
-            mstars_bulge = mstars_bulge_array[j]
-            sfr_disk = sfr_disk_array[j]
-            sfr_burst = sfr_burst_array[j]
-            mstars_tot = (mstars_disk + mstars_bulge)/h0
-            sfr = (sfr_disk + sfr_burst) / 1e9 / h0
-            sb_frac = sfr_burst/sfr #star burst fraction
-            typ = type_array[j]
-            gas_metallicity = ((bgm_array[j] + dgm_array[j])/(mgas_disk_array[j] + mgas_bulge_array[j]))/0.018 #gives gas metallicity
-            lir_w = lir_total_w[j]
-            teff = Teff[j]
-            mgas = (mgas_disk_array[j] + mgas_bulge_array[j]) / h0 #gas mass
-            r_gas_disk = r_gas_disk_array[j]/h0
-            rstar_disk = rstar_disk_array[j]/h0
-            mgas_disk = mgas_disk_array[j]/h0
-            matom_disk = matom_disk_array[j]/h0
-            mgas_metals_disk = mgas_metals_disk_array[j]/h0
-            mmol_disk = mmol_disk_array[j]/h0
-            
-            gas_surf_dens = mgas_disk/(2*r_gas_disk**2*np.pi) #gas surface density
-            
-            
+        df_temp['teff'] = Teff_lst[z]
+        print(lir_bc_disk_lst)
+        print(z)
+        print(Teff_lst)
+        
+        df_temp['lir_bc_disk'] = lir_bc_disk_lst[z]
+        
+        df_temp['lir_ism_disk'] = lir_ism_disk_lst[z]
+        
+        df_temp['lir_w'] = lir_total_W_lst[z]
 
-            qir_bress = qir_lst_bress[z][j]
-            bress_rad_lum = bress_rad_lum_lst[z][j] #radio luminosity of bressan model in watts
-            qir_dale = dale_qir_lst[j]
-            fir_flux = lir_total_W_lst[z][j]
-            rad_flux = flux_lst[3][j]
-            freefree = freefree_lst[z][j] #freefree luminosity
-            sync = sync_lst[z][j] #syncrhtotron luminosity
-            
-            ionising_photons = q_ionis[z][j]
-            
-            m_ab_z0 = (-2.5)*10**(bress_rad_lum/(4*np.pi*(d*100)**2)) - 48.60
-            
-            
-            
-            
-            lst.append(redshift)
-            lst.append(mstars_disk)
-            lst.append(mstars_bulge)
-            lst.append(mstars_tot)
-            lst.append(sfr_disk)
-            lst.append(sfr_burst)
-            lst.append(sfr)
-            lst.append(qir_bress)
-            lst.append(qir_dale)
-            lst.append(fir_flux)
-            lst.append(rad_flux)
-            lst.append(typ)
-            lst.append(gas_metallicity)
-            lst.append(lir_w)
-            lst.append(bress_rad_lum)
-            lst.append(mgas)
-            lst.append(freefree)
-            lst.append(sync)
-            lst.append(teff)
-            lst.append(sb_frac)
-            lst.append(r_gas_disk)
-            lst.append(rstar_disk)
-            lst.append(m_ab_z0)
-            lst.append(ionising_photons)
-            lst.append(mgas_disk)
-            lst.append(matom_disk)
-            lst.append(mgas_metals_disk)
-            lst.append(mmol_disk)
-            lst.append(gas_surf_dens)
-            lstlst.append(lst)
+        
+
+        
+        ir_mags = seds_bands_lst[z][2][9:16] #infrared magnitudes
+        
+        ir_lum = 10**((ir_mags+48.6)/(-2.5)) * (4*np.pi*(d * 100)**2) / 1e7 #IR flux in W/Hz
+        
+
+        df_temp['fir_lum'] = lir_total_W_lst[z]
+        
+        df_temp['lir_disk'] = lir_disk_w_lst[z]
+        
+        df_temp['lir_bulge'] = lir_bulge_w_lst[z]
+        
+        qir_lst_bress, qir_bress, bress_rad_lum_lst, bress_lir_total,freefree_lst, sync_lst, q_ionis,rad_disk_lum,rad_bulge_lum = bressan_model(seds_nodust_lst,seds_bands_lst,hdf5_lir_lst,lir_total_W_lst,h0,zlist)
+        df_temp['qir_bress'] = qir_lst_bress[z]
+        df_temp['rad_lum'] = bress_rad_lum_lst[z]
+        df_temp['freefree'] = freefree_lst[z]
+        df_temp['sync'] = sync_lst[z]
+        df_temp['q_ionis'] = q_ionis[z]
+        df_temp['rad_disk'] = rad_disk_lum[z]
+        df_temp['rad_bulge'] = rad_bulge_lum[z]
+
+
+        df = pd.concat([df,df_temp])
+
+    df['mstars_tot'] = (df['mstars_disk']+ df['mstars_bulge'])/h0
+
+    df['mgas'] = (df['mgas_disk']+ df['mgas_bulge']) /h0
+    df['sfr'] = (df['sfr_disk'] + df['sfr_burst'])/ 1e9 / h0  
+    df['gas_metal'] = ((df['mgas_metals_bulge']+df['mgas_metals_disk'])/(df['mgas'])*h0)/0.018
     
-    df = pd.DataFrame(lstlst, columns = ['z','mstars_disk','mstars_bulge','mstars_tot','sfr_disk','sfr_bulge','sfr','qir_bress','qir_dale','fir_flux','dale_rad_lum','type','gas_metal','lir_w','bress_rad_lum','mgas','freefree','sync','Teff','sb_frac','r_gas_disk','rstar_disk','m_ab_z0','ionising_photons','mgas_disk','matom_disk','mgas_metals_disk','mmol_disk','gas_surf_dens'])
-  #  print("Hooray!")
-    df['sfr/q'] = 'q'
-    df['sf_test'] = 1
-  #  print("This is df")
-  #  print(df)
+
+    
+    df['gas_surf_dens'] = (df['mgas_disk']/h0)/(2*(df['rgas_disk']/h0)**2*np.pi + 10**(-30))
+    df['mgas'] = (df['mgas_disk']+ df['mgas_bulge']) /h0
+
+
+
+    df['rad_tot'] = df['rad_bulge']+df['rad_lum']
+    
+
+    
+    
+    
+    df['qir_disk'] = np.log10(df['lir_disk']/3.75e12) - np.log10(df['rad_disk'])
+    df['qir_bulge'] = np.log10(df['lir_bulge']/3.75e12) - np.log10(df['rad_bulge'])
+    df['qir_test'] = np.log10((df['lir_disk']+df['lir_bulge'])/3.75e12) - np.log10((df['rad_disk']+df['rad_bulge']))
+
+
+
+
     sf_lst = []
+    
+    df = df.astype(np.float64)
+    
+    
+    df['sfg/q'] = 'q'
+    df['sf_test'] = 1
+    
+    print(df['rad_bulge'],df['rad_disk'],df['lir_disk'],df['lir_bulge'])
+    
+    print("Finding SFG")
     for z in zlist:
-        sfr_z = df.loc[((df['z'] == z)&(df['mstars_tot'] > 10**(9))&(df['mstars_tot'] < 10**(10))&(df['type'] == 0)),'sfr']
-        m_z = df.loc[((df['z'] == z)&(df['mstars_tot'] > 10**(9))&(df['mstars_tot'] < 10**(10))&(df['type'] == 0)),'mstars_tot']
+        print("Finding SFG for z = ",str(round(z,2)))
         
-        sfr_z = np.log10(sfr_z)
-        m_z = np.log10(m_z)
+        sfg_df = df[['sfr','mstars_tot']] [((df['z'] == z)&(df['mstars_tot'] > 10**(9))&(df['mstars_tot'] < 10**(10))&(df['type'] == 0)) ]
+        
+        sfr = sfg_df['sfr']
+        mst = sfg_df['mstars_tot']
+        sfr = np.log10(sfr)
+        mst = np.log10(mst)
         try:
-            a,b = np.polyfit(m_z,sfr_z,1)
+            a,b = np.polyfit(mst,sfr,1)
         except:
             print("using a and b from last round")
+        df['sf_test'] = np.log10(df['sfr']) - (a * np.log10(df['mstars_tot']) + b)
+        df.loc[((df['z'] == z)&(df['sf_test'] > -0.3)), 'sfg/q'] = 'sf'
+    
+    print(df)
+    
+    return df
 
-        df['sf_test'] = abs(np.log10(df['sfr']) - (a * np.log10(df['mstars_tot']) + b))
-        df.loc[((df['z'] == z)&(df['sf_test'] < 0.3)), 'sfr/q'] = 'sf'
-        
-        
-        
-        sf_gal_sfr = df.loc[((df['z'] == z)&(df['sfr/q'] == 'sf')),'sfr']
-        sf_gal_m = df.loc[((df['z'] == z)&(df['sfr/q'] == 'sf')),'mstars_tot']
-        q_gal_sfr = df.loc[((df['z'] == z)&(df['sfr/q'] == 'q')),'sfr']
-        q_gal_m = df.loc[((df['z'] == z)&(df['sfr/q'] == 'q')),'mstars_tot'] 
-        strz = str(z)
-        tit = "z = " + strz[:6]
-        
-        
-        
-       # plt.title(tit)
-        x = np.linspace(8, 12, 10)
-        y = a * x + b
-        y1 = a*x + b + 0.3
-        y2 = a*x + b - 0.3
 
-       # plt.plot(10**(x),10**(y),color = 'red',label = 'line fit')
-       # plt.fill_between(x,y1,y2,color = 'red')
-       # plt.scatter(sf_gal_m, sf_gal_sfr, label = 'Star forming')
-       # plt.scatter(q_gal_m, q_gal_sfr, label = 'Quenched')
-       # plt.yscale('log')
-       # plt.xscale('log')
-       # plt.xlabel("Stellar mass")
-       # plt.ylabel("SFR")
-       # plt.xlim(10**8,10**12)
-       # plt.ylim(10**(-3),10**(3))
-       # plt.legend()
-       # plt.show()
-        sf_lst.append((a,b))
     
-   # print("This is the number of star forming galaxies")
-   # print(len(df.loc[df['sfr/q'] == 'sf','sfr/q']))
-  #  print(df)
-    print("This is sfr/sync")
-    for i in range(99):
-        print(df['sfr']/df['sync'])
-    
-    
-    
-    return df, sf_lst
-    
+
     
 def GAMA_plots(df):
     
-    gd = pd.read_csv('GAMA_data.csv') #GAMA Data
+    
+    df_line = pd.DataFrame()
+    
+    
+    
+    gd = pd.read_csv('GAMA_data_1.csv') #GAMA Data
 
     gd['qir'] = (np.log10(gd['DustLum_50']*Lsun/3.75*10**12) - np.log10(gd['radioLum2']))*10**(-1)
+    
+
     gd['qir_err'] = (1/np.log(10)) * ((gd['DustLum_84'] - gd['DustLum_16'])/gd['DustLum_50'] + gd['radioLum2_err']/gd['radioLum2']) * (gd['radioLum2']/((gd['DustLum_50']*Lsun)/3.75*10**12))
-    qir = gd['qir']
+    qir_gama = gd['qir']
     qir_err = gd['qir_err']
     m = gd['StellarMass_50']
-    sfr = gd['SFR_50']
+    sfr_gama = gd['SFR_50']
     radlum = gd['radioLum2']
     firlum = gd['DustLum_50']*Lsun
     radlum_err = gd['radioLum2_err']
     firlum_err = ((gd['DustLum_16']*Lsun),(gd['DustLum_84']*Lsun))
-    
-    fig, ax = plt.subplots(2,2)
-    
+    plt.clf()
+
     m_err = (gd['StellarMass_50']-gd['StellarMass_16'],gd['StellarMass_84']-gd['StellarMass_50'])
     sfr_err = (gd['SFR_50']-gd['SFR_16'],gd['SFR_84']-gd['SFR_50'])
-    qir_bress = df.loc[((df['z'] < 0.1)&(df['fir_flux']>498972038.2)&(df['qir_bress']>0)&(df['qir_bress']<3)&(df['mstars_tot']>969913055.97323)&(df['mstars_tot']<529656145234.989)&(df['sfr']>0.01)&(df['sfr/q'] =='sf')),'qir_bress']
-    rad_bress = df.loc[((df['z'] < 0.1)&(df['fir_flux']>498972038.2)&(df['qir_bress']>0)&(df['qir_bress']<3)&(df['mstars_tot']>969913055.97323)&(df['mstars_tot']<529656145234.989)&(df['sfr']>0.01)&(df['sfr/q'] =='sf')),'bress_rad_lum']
-    fir_bress = df.loc[((df['z'] < 0.1)&(df['fir_flux']>498972038.2)&(df['qir_bress']>0)&(df['qir_bress']<3)&(df['mstars_tot']>969913055.97323)&(df['mstars_tot']<529656145234.989)&(df['sfr']>0.01)&(df['sfr/q'] =='sf')),'fir_flux']
-    m_shark = df.loc[((df['z'] < 0.1)&(df['fir_flux']>498972038.2)&(df['qir_bress']>0)&(df['qir_bress']<3)&(df['mstars_tot']>969913055.97323)&(df['mstars_tot']<529656145234.989)&(df['sfr']>0.01)&(df['sfr/q'] =='sf')),'mstars_tot']
-    sfr_shark = df.loc[((df['z'] < 0.1)&(df['fir_flux']>498972038.2)&(df['qir_bress']>0)&(df['qir_bress']<3)&(df['mstars_tot']>969913055.97323)&(df['mstars_tot']<529656145234.989)&(df['sfr']>0.01)&(df['sfr/q'] =='sf')),'sfr']
+    
+    GAMA_df = df[['qir_bress','rad_lum','fir_lum','mstars_tot','sfr']] [((df['z'] == 0)&(df['mstars_tot']>10**(8.0))&(df['mstars_tot']<1e12)&(df['sfg/q'] =='sf')) ]   #Selects all galaxies that correspond to these parameters which match GAMA. 
+    
+    qir = GAMA_df['qir_bress']
+    rad = GAMA_df['rad_lum']
+    fir = GAMA_df['fir_lum']
+    mst = GAMA_df['mstars_tot']   ##Total stellar mass
+    sfr = GAMA_df['sfr']
 
-    
-  #  m_shark = df.loc[((df['z'] < 0.5)&(df['bress_rad_lum']>5.60906e+19)&(df['fir_flux']>498972038.2)),'mstars_tot']
-  #  sfr_shark = df.loc[((df['z'] < 0.5)&(df['bress_rad_lum']>5.60906e+19)&(df['fir_flux']>498972038.2)),'sfr']
-    
+    fig, ax = plt.subplots(1,2)
     vmin = 4
     vmax = 30
+    mid_rad,med_fir,low_fir,upp_fir = median_line(rad,fir,True,True)
     
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(rad_bress,fir_bress,True,True)
+    df_line['mid_rad'] = mid_rad
+    df_line['med_fir'] = med_fir
+    df_line['low_fir'] = low_fir
+    df_line['upp_fir'] = upp_fir
+            
     
-    ax[0,0].hexbin(rad_bress,fir_bress,mincnt = 1, xscale='log',yscale='log',cmap='rainbow', gridsize = 30,vmin= vmin, vmax = vmax)
-    ax[0,0].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[0,0].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[0,0].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[0,0].errorbar(radlum,firlum, xerr = radlum_err,yerr = firlum_err,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'GAMA Data',ecolor='black',elinewidth = 0.3)
-    ax[0,0].set_xscale('log')
-    ax[0,0].set_yscale('log')
-    ax[0,0].set_title('L$_{IR}$ vs. L$_{rad}$')
-    ax[0,0].set_xlabel('log$_{10}$(L$_{rad/1.4GHz}$)/ W/Hz')
-    ax[0,0].set_ylabel('log$_{10}$(L$_{IR}$) W')
+    
+    #ax[0,0].hexbin(rad_bress,fir_bress,mincnt = 1, xscale='log',yscale='log',cmap='rainbow', gridsize = 30,vmin= vmin, vmax = vmax)
+    ax[0].plot(mid_rad,med_fir,'red')
+    ax[0].fill_between(mid_rad,low_fir,upp_fir,color = 'red',alpha = 0.5)
+    ax[0].errorbar(radlum,firlum, xerr = radlum_err,yerr = firlum_err,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'GAMA Data',ecolor='black',elinewidth = 0.5)
+    ax[0].set_xlabel('L$_{rad/1.4GHz}$/ W/Hz',fontsize = 20)
+    ax[0].set_ylabel('(L$_{IR}$) W',fontsize = 20)
+    ax[0].set_xscale('log')
+    ax[0].set_yscale('log')
+
+    mid_m_lst_a,med_sfr_lst_a,low_sfr_lst_a,high_sfr_lst_a = any_sigma_lines(mst,sfr,True,True,100,0)
+    mid_m_lst,med_sfr_lst,low_sfr_lst,high_sfr_lst = median_line(mst,sfr,True,True)    
+    df_line['mid_mst'] = mid_m_lst
+    df_line['med_sfr'] = med_sfr_lst
+    df_line['low_sfr'] = low_sfr_lst
+    df_line['upp_sfr'] = high_sfr_lst
+    
+    df_line['mid_mst_a'] = mid_m_lst_a
+    df_line['med_sfr_a'] = med_sfr_lst_a
+    df_line['low_sfr_a'] = low_sfr_lst_a
+    df_line['upp_sfr_a'] = high_sfr_lst_a   
+    
+    ax[1].plot(mid_m_lst,med_sfr_lst,'red')
+    ax[1].fill_between(mid_m_lst,low_sfr_lst,high_sfr_lst,color = 'red',alpha = 0.5)
+    ax[1].errorbar(m,sfr_gama, xerr =sfr_err,yerr = qir_err,fmt="o",label = 'GAMA Data',markerfacecolor='None', markeredgecolor='black',ecolor = 'black',elinewidth = 0.5,markersize = 10)
+    ax[1].set_xlabel("Stellar Mass/$M_\odot$",fontsize = 20)
+    ax[1].set_ylabel("SFR/$M_\odot$/yr",fontsize = 20)
+    ax[1].set_xscale('log')
+    ax[1].set_yscale('log')
+    
+    fig.set_size_inches(12, 12)
+    plt.tight_layout()
+    plt.savefig('plots/GAMA_plts_model.pdf')
+    plt.show()
+    
+    plt.clf()
+    
+    
+    
    # cb = plt.colorbar(c)
    # cb.set_label('Number count')
    # plt.show()
+   # plt.savefig('plots/GAMA_rad_lir.pdf')
+   # plt.show()
+    #plt.clf()
     
-    mid_m_lst,med_qir_lst,low_qir_lst,high_qir_lst = median_line(m_shark,qir_bress,True,False)
     
+    
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,True,False)
+    
+    df_line['med_qir'] = med_qir
+    df_line['low_qir'] = low_qir
+    df_line['upp_qir'] = high_qir
+    
+    
+    
+    delv_qir = 2.586 + (-0.124)*(np.log10(mst) - 10) #Eqn from Delvecchio et al. 2021 from fig. 14
+    
+    
+    
+    
+    
+    mid_m,med_delv,low_delv,high_delv = median_line(mst,delv_qir,True,False)
 
     
-    ax[0,1].hexbin(m_shark,qir_bress,mincnt = 1, xscale='log',cmap='rainbow', gridsize = 30,vmin= vmin, vmax = vmax) 
-    ax[0,1].plot(mid_m_lst,med_qir_lst,'black')
-    ax[0,1].plot(mid_m_lst,low_qir_lst,'black',linestyle='dashed')   
-    ax[0,1].plot(mid_m_lst,high_qir_lst,'black',linestyle='dashed')
-    ax[0,1].errorbar(m,qir, xerr = m_err,yerr = qir_err,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.3)
-    ax[0,1].set_xscale('log')
-    ax[0,1].set_title("qir vs. Stellar mass")
-    ax[0,1].set_xlabel("log$_{10}$(Stellar Mass/$M_\odot$)")
-    ax[0,1].set_ylabel("qir")
-    
-    mid_sfr_lst,med_qir_lst,low_qir_lst,high_qir_lst = median_line(sfr_shark,qir_bress,True,False)
-    
-    ax[1,1].hexbin(sfr_shark,qir_bress,mincnt = 4, xscale='log',cmap='rainbow', gridsize = 30,vmin= vmin, vmax = vmax)
-    
-    ax[1,1].plot(mid_sfr_lst,med_qir_lst,'black')
-    ax[1,1].plot(mid_sfr_lst,low_qir_lst,'black',linestyle='dashed')   
-    ax[1,1].plot(mid_sfr_lst,high_qir_lst,'black',linestyle='dashed')
-    
-    ax[1,1].errorbar(sfr,qir, xerr =sfr_err,yerr = qir_err,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.3)
-    ax[1,1].set_xscale('log')
-    ax[1,1].set_title("qir vs. SFR")
-    ax[1,1].set_xlabel("log$_{10}$(SFR/$M_\odot$/yr)")
-    ax[1,1].set_ylabel("qir")
-        
-    mid_m_lst,med_sfr_lst,low_sfr_lst,high_sfr_lst = median_line(m_shark,sfr_shark,True,True)
-    
-    c = ax[1,0].hexbin(m_shark,sfr_shark,mincnt = 1, xscale='log',yscale = 'log',cmap='rainbow', gridsize = 30,vmin= vmin, vmax = vmax)
-    
-    ax[1,0].plot(mid_m_lst,med_sfr_lst,'black')
-    ax[1,0].plot(mid_m_lst,low_sfr_lst,'black',linestyle='dashed')   
-    ax[1,0].plot(mid_m_lst,high_sfr_lst,'black',linestyle='dashed')
-    
-
-    ax[1,0].errorbar(m,sfr, xerr =sfr_err,yerr = qir_err,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.3)
-    ax[1,0].set_title("SFR vs. Stellar Mass")
-    ax[1,0].set_xlabel("log$_{10}$(Stellar Mass/$M_\odot$)")
-    ax[1,0].set_ylabel("log$_{10}$(SFR/$M_\odot$/yr)")
-  #  cb = fig.colorbar(c, ax=ax.ravel().tolist())
-  #  cb.set_label('Number Count')
-    fig.set_size_inches(9, 9)
-    plt.tight_layout()
-    cb = fig.colorbar(c, ax=ax.ravel().tolist())
-    cb.set_label('Number Count')
-    plt.savefig("GAMA_plot.pdf",format='pdf')
+    plt.plot(mid_m,med_qir,'red')
+    plt.fill_between(mid_m,low_qir,high_qir,color = 'red',alpha = 0.5, label = 'SHARK')
+    plt.plot(mid_m,med_delv,color = 'red')
+    plt.fill_between(mid_m,low_delv,high_delv,color = 'red',alpha = 0.5, label = 'Delvecchio et al. 2021')
+    plt.errorbar(m,qir_gama, xerr = m_err,yerr = qir_err,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.5)
+    plt.xscale('log')
+    plt.xlabel("Stellar Mass/$M_\odot$",fontsize = 12)
+    plt.ylabel("qir",fontsize = 12)
+    plt.legend()
+    fig.set_size_inches(12, 12)
+    plt.savefig('plots/GAMA_mstar_qir.pdf')
     plt.show()
+    plt.clf()
+    
+    df_line.to_csv('GAMA_data_SHARK.csv')
+    
     
     
 def lo_faro_plots(df):
     
-
+    df_line = pd.DataFrame()
     Lsun = 3.828 * 10**26 #W
-    df_lf = pd.read_csv('Documents/Masters/Masters_Thesis/french_paper_2_pg16.csv')
+    
+    ###Reading in and setting up data from Lo Faro et al. ###
+    
+    df_lf = pd.read_csv('french_paper_2_pg16.csv')
+    
     df_lf['LIR/W'] = df_lf['LIR'] * Lsun
 
     df_lf['qir'] = np.log10((df_lf['LIR/W']/(3.75*10**12))/df_lf['L1.4'])
     
-    q = 0
+    df_lf['L1.4_err'] = 0.13 + df_lf['qir_err']#approximate error of L_1.4
     
-    df_lf['L1.4_err'] = df_lf['L1.4']*(0.1 *np.log(10) - 10**(0.13)/df_lf['LIR/W'])
+    ### Reading in LIRG data from Lo Faro et al. ###
     
-    sfr10_1 = df_lf.loc[(df_lf['z'] < 1.5),'SFR10']
-    sfr10_2 = df_lf.loc[(df_lf['z'] > 1.5),'SFR10']
-    m_1 = df_lf.loc[(df_lf['z'] < 1.5),'M_star']
-    m_2 = df_lf.loc[(df_lf['z'] > 1.5),'M_star']
-
-    LIR1 = df_lf.loc[(df_lf['z'] < 1.5),'LIR/W']
-    LIR2 = df_lf.loc[(df_lf['z'] > 1.5),'LIR/W']
-
-    Lrad1 = df_lf.loc[(df_lf['z'] < 1.5),'L1.4']
-    Lrad2 = df_lf.loc[(df_lf['z'] > 1.5),'L1.4']
-
-    qir1 = df_lf.loc[(df_lf['z'] < 1.5),'qir']
-    qir2 = df_lf.loc[(df_lf['z'] > 1.5),'qir']
-
-
-    LIR1 = np.log10(LIR1)
-    LIR2 = np.log10(LIR2)
-
-    Lrad1 = np.log10(Lrad1)
-    Lrad2 = np.log10(Lrad2)
-
-    sfr10_1 = np.log10(sfr10_1)
-    sfr10_2 = np.log10(sfr10_2) 
+    LIRG_lf = df_lf[['SFR10','M_star','LIR/W','L1.4','qir','L1.4_err','qir_err']] [(df_lf['z'] < 1.5) ]
     
-    m_2 = np.log10(m_2) 
-    m_1 = np.log10(m_1) 
-
+    sfr_L = np.log10(LIRG_lf['SFR10'])
+    mst_L = np.log10(LIRG_lf['M_star'])
+    lir_L = np.log10(LIRG_lf['LIR/W'])
+    rad_L = np.log10(LIRG_lf['L1.4'])
+    qir_L = LIRG_lf['qir']
+    Lrad_err_L = LIRG_lf['L1.4_err']
+    qir_err_L = LIRG_lf['qir_err']
     
-    rad_bress_1 = df.loc[((df['z'] < 1.05)&(df['z']>0.8)&(df['fir_flux']>7.88568e+37)&(df['z'] == 0.909822023685613)),'bress_rad_lum']
-    fir_bress_1 = df.loc[((df['z'] < 1.05)&(df['z']>0.8)&(df['fir_flux']>7.88568e+37)&(df['z'] == 0.909822023685613)),'fir_flux']
+    ###Reading in ULIRG from Lo Faro et al.###
     
-    rad_bress_2 = df.loc[((df['z'] < 2.2)&(df['z']>1.5)&(df['fir_flux']>7.88568e+37)&(df['z'] == 2.00391410007239)),'bress_rad_lum']
-    fir_bress_2 = df.loc[((df['z'] < 2.2)&(df['z']>1.5)&(df['fir_flux']>7.88568e+37)&(df['z'] == 2.00391410007239)),'fir_flux']
+    ULIRG_lf = df_lf[['SFR10','M_star','LIR/W','L1.4','qir','L1.4_err','qir_err']] [(df_lf['z'] > 1.5) ]
     
-    rad_bress_1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'bress_rad_lum']
-    fir_bress_1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'fir_flux']
-    
-    rad_bress_2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'bress_rad_lum']
-    fir_bress_2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'fir_flux']
-    
-    rad_bress_1 = np.log10(rad_bress_1)
-    
-    rad_bress_2 = np.log10(rad_bress_2)
-    fir_bress_2 = np.log10(fir_bress_2)
-    fir_bress_1 = np.log10(fir_bress_1)
+    sfr_U = np.log10(ULIRG_lf['SFR10'])
+    mst_U = np.log10(ULIRG_lf['M_star'])
+    lir_U = np.log10(ULIRG_lf['LIR/W'])
+    rad_U = np.log10(ULIRG_lf['L1.4'])
+    qir_U = ULIRG_lf['qir']
+    Lrad_err_U = ULIRG_lf['L1.4_err']
+    qir_err_U = ULIRG_lf['qir_err']
     
 
     
-    Lrad2_uncert = np.log10(df_lf.loc[(df_lf['z'] > 1.5),'L1.4_err'])
+    ###Reading in data from SHARK dataframe for LIRGs###
+    
+    
+    LIRG = df[['qir_bress','rad_lum','fir_lum','mstars_tot','sfr']] [(df['fir_lum']>1e11*Lsun)&(df['fir_lum']<1e12*Lsun) ]
+
+    sfr_SL = np.log10(LIRG['sfr']) #SFR for SHARK LIRGs
+    mst_SL = np.log10(LIRG['mstars_tot'])
+    lir_SL = np.log10(LIRG['fir_lum'])
+    rad_SL = np.log10(LIRG['rad_lum'])
+    qir_SL = LIRG['qir_bress']
+    
+    ###Reading in data from SHARK dataframe for ULIRGs
+
+    ULIRG = df[['qir_bress','rad_lum','fir_lum','mstars_tot','sfr']] [(df['fir_lum']>1e12*Lsun)&(df['fir_lum']<1e13*Lsun) ]
+    
+    sfr_SU = np.log10(ULIRG['sfr']) #SFR for SHARK ULIRGs
+    mst_SU = np.log10(ULIRG['mstars_tot'])
+    lir_SU = np.log10(ULIRG['fir_lum'])
+    rad_SU = np.log10(ULIRG['rad_lum'])
+    qir_SU = ULIRG['qir_bress']
+
+    ###Reading in data from SHARK dataframe for both LIRGs and ULIRGs
+    
+    all_LIRG = df[['rad_lum','fir_lum']] [(df['fir_lum']>1e11*Lsun) ]
+    
+    rad_all = np.log10(all_LIRG['rad_lum'])
+    fir_all = np.log10(all_LIRG['fir_lum'])
+    
+    ###Creating test plots###
+    vmin = 1
+    vmax = 100
+    fig, ax = plt.subplots(1,2)
+    
+    ###Creating median lines for a single line in Lir vs. Lrad
+    
+    mid_fir,med_rad,low_rad,high_rad = median_line(fir_all,rad_all,False,False)
+    where_LIRG = np.where(mid_fir < np.log10(1e12*Lsun)) #finds the LIRGs
+    where_ULIRG = np.where(mid_fir > np.log10(1e12*Lsun)) #finds the ULIRGs
+    
+    med_rad_L = med_rad[where_LIRG] #finds the radio of LIRGs
+    mid_fir_L = mid_fir[where_LIRG] #finds the fir of LIRGs
+    high_rad_L = high_rad[where_LIRG]
+    low_rad_L = low_rad[where_LIRG]
+    
+    
+    med_rad_U = med_rad[where_ULIRG] #finds the radio of ULIRGs
+    mid_fir_U = mid_fir[where_ULIRG] #finds the fir of ULIRGs
+    high_rad_U = high_rad[where_ULIRG]
+    low_rad_U = low_rad[where_ULIRG]
+
+    
+    med_rad_U = np.append(med_rad_L[-1],med_rad_U)
+    mid_fir_U = np.append(mid_fir_L[-1],mid_fir_U)
+    high_rad_U = np.append(high_rad_L[-1],high_rad_U)
+    low_rad_U = np.append(low_rad_L[-1],low_rad_U)
+
+    lo_faro_lirg_rad_med = np.log10(10**(mid_fir_L)/(3.75*1e12)) - 2.83
+    lo_faro_lirg_rad_low = np.log10(10**(mid_fir_L)/(3.75*1e12)) - 2.93
+    lo_faro_lirg_rad_upp = np.log10(10**(mid_fir_L)/(3.75*1e12)) - 2.73
+
+    lo_faro_ulirg_rad_med = np.log10(10**(mid_fir_U)/(3.75*1e12)) - 2.76
+    lo_faro_ulirg_rad_upp = np.log10(10**(mid_fir_U)/(3.75*1e12)) - 2.86
+    lo_faro_ulirg_rad_low = np.log10(10**(mid_fir_U)/(3.75*1e12)) - 2.66
+
+    sargent_ulirg_rad_med = np.log10(10**(mid_fir_U)/(3.75*1e12)) - 2.672
+    sargent_ulirg_rad_upp = np.log10(10**(mid_fir_U)/(3.75*1e12)) - 2.793
+    sargent_ulirg_rad_low = np.log10(10**(mid_fir_U)/(3.75*1e12)) - 2.551
+
+   # ax[0].hexbin(rad_SL,lir_SL,mincnt = 1,cmap='Blues', gridsize = 50,alpha = 0.75,label = 'SHARK - LIRGs',extent = (22,24.5, 37.85, 39.50),vmin = vmin,vmax = vmax)
+   # ax[0].hexbin(rad_SU,lir_SU,mincnt = 1,cmap='Reds', gridsize = 50,alpha = 0.75,label = 'SHARK - ULIRGs',extent = (22,24.5, 37.85, 39.50),vmin = vmin,vmax = vmax)
+    temp_rad_L = np.zeros(30)
+    temp_fir_L = np.zeros(30)
+    temp_low_L = np.zeros(30)
+    temp_upp_L = np.zeros(30)
+    
+    temp_rad_U = np.zeros(30)
+    temp_fir_U = np.zeros(30)
+    temp_low_U = np.zeros(30)
+    temp_upp_U = np.zeros(30)    
+    
+    for i in range(len(med_rad_L)):
+        temp_rad_L[i] = med_rad_L[i]
+        temp_fir_L[i] = med_fir_L[i]
+        temp_low_L[i] = low_rad_L[i]
+        temp_upp_L[i] = high_rad_L[i]
+    
+    for i in range(len(data_2)):
+         
+        temp_rad_U[-i-1] = med_rad_U
+        temp_fir_U[-i-1] = med_rad_U
+        temp_low_U[-i-1] = med_fir_U 
+        temp_upp_U[-i-1] = high_rad_U 
+    
+    df_line['med_rad_L'] = temp_rad_L
+    df_line['mid_fir_L'] = temp_fir_L    
+    df_line['low_rad_L'] = temp_low_L
+    df_line['upp_rad_L'] = temp_upp_L
+    
+    df_line['med_rad_U'] = temp_rad_U
+    df_line['mid_fir_U'] = temp_fir_U    
+    df_line['low_rad_U'] = temp_low_U
+    df_line['upp_rad_U'] = temp_upp_U
+    
+    ax[0].plot(med_rad_L,mid_fir_L,'blue',linewidth = 3,label = 'SHARK - LIRGs')
+    ax[0].fill_betweenx(mid_fir_L,low_rad_L,high_rad_L,color = 'blue',alpha = 0.5)
+    ax[0].plot(med_rad_U,mid_fir_U,'red',linewidth = 3,label = 'SHARK - ULIRGs')
+    ax[0].fill_betweenx(mid_fir_U,low_rad_U,high_rad_U,color = 'red',alpha = 0.5)
+    ax[0].plot(lo_faro_lirg_rad_med,mid_fir_L,'black',linewidth = 3,linestyle = 'solid',label = 'Lo Faro et al. (2015)')
+    ax[0].plot(lo_faro_ulirg_rad_med,mid_fir_U,'black',linewidth = 3,linestyle = 'solid')
+    ax[0].plot(sargent_ulirg_rad_med,mid_fir_U,'black',linewidth = 3,linestyle = 'dashed',label = 'Sargent et al. (2010)')    
+    ax[0].errorbar(rad_L,lir_L, xerr = Lrad_err_L,yerr = 0.13,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - LIRGs',ecolor='black', markersize='10')
+    ax[0].errorbar(rad_U,lir_U, xerr = Lrad_err_U,yerr = 0.13,fmt="*",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - ULIRGs',ecolor='black', markersize='10')
+    ax[0].set_xlim(22,24.5)
+    ax[0].set_ylim(37.85,39.50)    
+    ax[0].set_xlabel('$Log_{10}$(L$_{rad/1.4GHz}$/ W/Hz)',fontsize = 20)
+    ax[0].set_ylabel('$Log_{10}$((L$_{IR}$)/W)',fontsize = 20)
+                                         
+    ax[0].legend()
+    mid_m_L,med_sfr_L,low_sfr_L,high_sfr_L = median_line(mst_SL,sfr_SL,False,False)
+    mid_m_U,med_sfr_U,low_sfr_U,high_sfr_U = median_line(mst_SU,sfr_SU,False,False)
+   # c1 = ax[1].hexbin(mst_SL,sfr_SL,mincnt = 1,cmap='Blues', gridsize = 50,alpha = 0.75,extent = (10,12, 0, 3),vmin = vmin,vmax = vmax)
+   # c2 = ax[1].hexbin(mst_SU,sfr_SU,mincnt = 1,cmap='Reds', gridsize = 50,alpha = 0.75,extent = (10,12, 0, 3),vmin = vmin,vmax = vmax)
+    
+    df_line['med_mst_L'] = pd.Series(mid_m_L)
+    df_line['med_sfr_L'] = pd.Series(med_sfr_L)    
+    df_line['low_sfr_L'] = pd.Series(low_sfr_L)
+    df_line['upp_sfr_L'] = pd.Series(high_sfr_L)
+    
+    df_line['med_mst_U'] = pd.Series(mid_m_U)
+    df_line['med_sfr_U'] = pd.Series(med_sfr_U)    
+    df_line['low_sfr_U'] = pd.Series(low_sfr_U)
+    df_line['upp_sfr_U'] = pd.Series(high_sfr_U)
+    
+    
+    
+    ax[1].plot(mid_m_L,med_sfr_L,'blue',label = 'SHARK - LIRGs',linewidth = 3)
+    ax[1].fill_between(mid_m_L,low_sfr_L,high_sfr_L,color = 'blue',alpha = 0.5)
+    ax[1].plot(mid_m_U,med_sfr_U,'red',label = 'SHARK - ULIRGs',linewidth = 3)
+    ax[1].fill_between(mid_m_U,low_sfr_U,high_sfr_U,color = 'red',alpha = 0.5)
+    ax[1].errorbar(mst_L,sfr_L, xerr = 0.2,yerr = 0.2,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - LIRGs',ecolor='black', markersize='10')
+    ax[1].errorbar(mst_U,sfr_U, xerr = 0.2,yerr = 0.2,fmt="*",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - ULIRGs',ecolor='black', markersize='10')
+    ax[1].set_xlabel("$Log_{10}$(Stellar Mass/$M_\odot$)",fontsize = 20)
+    ax[1].set_ylabel("$Log_{10}$(SFR/$M_\odot$/yr)",fontsize = 20)
+    ax[1].set_xlim(9,12)
+    ax[1].set_ylim(0,3)
+    
+   # cb1 = plt.colorbar(c1,pad=0,fraction=0.27)
+   # cb2 = plt.colorbar(c2,pad=0,fraction=0.1)
+    #cb2.set_ticks([])
+   # cb1.set_label('Number Count')
+    
+    ax[0].legend()
+    fig.set_size_inches(15,15)
+    plt.savefig('plots/Lo_Faro_plts.pdf')
+    
+    plt.show()    
+    plt.clf()
+    fig, ax = plt.subplots(1,1)
+    ###Creating qir mstar plots###
+    lin_mst = np.linspace(9,12,2) 
+    lirg_lf_mid = np.full(len(lin_mst),2.83)
+    lirg_lf_low = np.full(len(lin_mst),2.73)
+    lirg_lf_upp = np.full(len(lin_mst),2.93)
+
+    ulirg_lf_mid = np.full(len(lin_mst),2.76)
+    ulirg_lf_low = np.full(len(lin_mst),2.66)
+    ulirg_lf_upp = np.full(len(lin_mst),2.86)
+
+    ulirg_sar_mid = np.full(len(lin_mst),2.672)
+    ulirg_sar_low = np.full(len(lin_mst),2.793)
+    ulirg_sar_upp = np.full(len(lin_mst),2.551)
+    
+    
+    mid_m_U,med_qir_U,low_qir_U,high_qir_U = median_line(mst_SU,qir_SU,False,False)
+    mid_m_L,med_qir_L,low_qir_L,high_qir_L = median_line(mst_SL,qir_SL,False,False)
+    
+
+    df_line['med_qir_L'] = pd.Series(med_qir_L)    
+    df_line['low_qir_L'] = pd.Series(low_qir_L)
+    df_line['upp_qir_L'] = pd.Series(high_qir_L)
+    
+    df_line['med_qir_U'] = pd.Series(med_qir_U)    
+    df_line['low_qir_U'] = pd.Series(low_qir_U)
+    df_line['upp_qir_U'] = pd.Series(high_qir_U)
+    
+    
+
+  #  c1 = ax.hexbin(mst_SL,qir_SL,mincnt = 1,cmap='Blues', gridsize = 30,alpha = 0.75,extent = (10,12, 2, 3.2),vmin = vmin,vmax = vmax)
+  #  c2 = ax.hexbin(mst_SU,qir_SU,mincnt = 1,cmap='Reds', gridsize = 30,alpha = 0.75,extent = (10,12, 2, 3.2),vmin = vmin,vmax = vmax
+    ax.plot(mid_m_L,med_qir_L,'blue',label = 'SHARK - LIRGs',linewidth = 3) 
+    ax.fill_between(mid_m_L,low_qir_L,high_qir_L,color = 'blue',alpha = 0.5)
+    ax.plot(mid_m_U,med_qir_U,'red',label = 'SHARK - ULIRGs',linewidth = 3)
+    ax.fill_between(mid_m_U,low_qir_U,high_qir_U,color = 'red',alpha = 0.5)
+    ax.plot(lin_mst,lirg_lf_mid,label = 'Lo Faro et al. (2015) - LIRGs',color = 'blue',linestyle = 'dashed',linewidth = 3)
+    ax.plot(lin_mst,ulirg_lf_mid,label = 'Lo Faro et al. (2015) - ULIRGs',color = 'red',linestyle = 'dashed',linewidth = 3)
+    ax.plot(lin_mst,ulirg_sar_mid,label = 'Sargent et al. (2010) - ULIRGs',color = 'black',linestyle = 'dashed',linewidth = 3)
+    ax.errorbar(mst_L,qir_L, xerr = 0.2,yerr = qir_err_L ,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - LIRGs',ecolor='black', markersize='10')
+    ax.errorbar(mst_U,qir_U, xerr = 0.2,yerr = qir_err_U ,fmt="*",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - ULIRGs',ecolor='black', markersize='10') 
+    ax.set_xlabel("$Log_{10}$(Stellar Mass/$M_\odot$)",fontsize = 20)
+    ax.set_ylabel("qir",fontsize = 20)
+    ax.set_xlim(9,12)
+    ax.set_ylim(2.2,3.2)
+  #  cb1 = plt.colorbar(c1,pad=0,fraction=0.335)
+  #  cb2 = plt.colorbar(c2,pad=0,fraction=0.075)
+  #  cb2.set_ticks([])
+  #  cb1.set_label('Number Count')
+    ax.legend()
+    fig.set_size_inches(10, 10)
+    plt.savefig('plots/Lo_Faro_mstar_qir.pdf')
+    plt.show()
+    plt.clf()
+    ###Creating the qir vs. sfr plot###
+    fig, ax = plt.subplots(1,1)
+    
+    lin_sfr = np.linspace(0,3,2)
+
+    lirg_lf_mid = np.full(len(lin_sfr),2.83)
+
+    ulirg_lf_mid = np.full(len(lin_sfr),2.76)
+
+
+    ulirg_sar_mid = np.full(len(lin_sfr),2.672)
+    
+    
+    mid_s_U,med_qir_U,low_qir_U,high_qir_U = median_line(sfr_SU,qir_SU,False,False)
+    mid_s_L,med_qir_L,low_qir_L,high_qir_L = median_line(sfr_SL,qir_SL,False,False)
+    
+    df_line['mid_sfr_L'] = pd.Series(mid_s_L)
+    df_line['med_qir_L_sfr'] = pd.Series(med_qir_L)    
+    df_line['low_qir_L_sfr'] = pd.Series(low_qir_L)
+    df_line['upp_qir_L_sfr'] = pd.Series(high_qir_L)
+    
+    df_line['mid_sfr_U'] = pd.Series(mid_s_U)
+    df_line['med_qir_U_sfr'] = pd.Series(med_qir_U)    
+    df_line['low_qir_U_sfr'] = pd.Series(low_qir_U)
+    df_line['upp_qir_U_sfr'] = pd.Series(high_qir_U)   
 
     
     
     
-#['z','mstars_disk','mstars_bulge','mstars_tot','sfr_disk','sfr_bulge','sfr','qir_bress','qir_dale','fir_flux','dale_rad_lum','type','gas_metal','lir_w','bress_rad_lum','mgas','freefree','sync','Teff','sb_frac','r_gas_disk'])
+    
+    ax.plot(mid_s_L,med_qir_L,'blue',label = 'SHARK - LIRGs',linewidth = 3) 
+    ax.fill_between(mid_s_L,low_qir_L,high_qir_L,color = 'blue',alpha = 0.5)
+    ax.plot(mid_s_U,med_qir_U,'red',label = 'SHARK - LIRGs',linewidth = 3)
+    ax.fill_between(mid_s_U,low_qir_U,high_qir_U,color = 'red',alpha = 0.5)
+    
+    ax.plot(lin_sfr,lirg_lf_mid,label = 'Lo Faro et al. (2015) - LIRGs',color = 'blue',linestyle = 'dashed',linewidth = 3)
+    ax.plot(lin_sfr,ulirg_lf_mid,label = 'Lo Faro et al. (2015) - ULIRGs',color = 'red',linestyle = 'dashed',linewidth = 3)
+    ax.plot(lin_sfr,ulirg_sar_mid,label = 'Sargent et al. (2010) - ULIRGs',color = 'black',linestyle = 'dashed',linewidth = 3)
+    
+    ax.errorbar(sfr_L,qir_L, xerr = 0.2,yerr = qir_err_L ,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - LIRGs',ecolor='black', markersize='10')
+    ax.errorbar(sfr_U,qir_U, xerr = 0.2,yerr = qir_err_U ,fmt="*",markerfacecolor='white', markeredgecolor='black',label = 'Lo Faro et al. (2015) - ULIRGs',ecolor='black', markersize='10') 
+    ax.set_xlabel("$Log_{10}$(SFR/$M_\odot$/yr)",fontsize = 20)
+    ax.set_ylabel("qir",fontsize = 20)
+    ax.set_xlim(0,3)
+    ax.set_ylim(2.2,3.2)
+  #  cb1 = plt.colorbar(c1,pad=0,fraction=0.335)
+  #  cb2 = plt.colorbar(c2,pad=0,fraction=0.075)
+  #  cb2.set_ticks([])
+  #  cb1.set_label('Number Count')
+    ax.legend()
+    fig.set_size_inches(10, 10)
+    plt.savefig('plots/Lo_Faro_sfr_qir.pdf')
+    plt.show()
 
-
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(rad_bress_1,fir_bress_1,True,True)
+    df_line.to_csv('lo_faro_plots_SHARK_lines_new.csv')
     
-
-
-    fig, ax = plt.subplots(2,2)
-    fig.set_size_inches(15, 11)
-    c = ax[0,0].hexbin(rad_bress_1,fir_bress_1,mincnt = 1, cmap='rainbow', gridsize = 30,vmin = 0, vmax = 1000)
-    ax[0,0].scatter(Lrad1,LIR1,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-    ax[0,0].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[0,0].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[0,0].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[0,0].set_xlim(20,26)
-    ax[0,0].set_ylim(36,40)
-    ax[0,0].set_xlabel("Log10(L 1.4 GHz) W/Hz")
-    ax[0,0].set_ylabel("Log10(LFIR) W/Hz")
-    ax[0,0].set_title("z ~ 1")
+    ###Creating plots for LIRGs
     
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(rad_bress_2,fir_bress_2,True,True)
-    ax[0,1].hexbin(rad_bress_2,fir_bress_2,mincnt = 1, cmap='Greys', gridsize = 30,vmin = 0, vmax = 1000)
-    ax[0,1].scatter(Lrad2,LIR2,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-    ax[0,1].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[0,1].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[0,1].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[0,1].set_xlabel("Log10(L 1.4 GHz) W/Hz")
-    ax[0,1].set_ylabel("Log10(LFIR) W/Hz")
-   # ax[0,1].text('LIR vs. Lrad', y=1.0, pad=-14)
-    ax[0,1].set_title("z ~ 2")
+    mid_rad,med_fir,low_fir,high_fir = median_line(rad_SL,lir_SL,False,False)
+    #ax[0,0].hexbin(rad_bress,fir_bress,mincnt = 1, xscale='log',yscale='log',cmap='rainbow', gridsize = 30,vmin= vmin, vmax = vmax)
+    ax[0].plot(mid_rad,med_fir,'blue')
+    ax[0].fill_between(mid_rad,low_fir,high_fir,color = 'blue',alpha = 0.5)
+    ax[0].errorbar(rad_L,lir_L, xerr = 0.13,yerr = 0.13,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'Lor Faro et al.',ecolor='black',elinewidth = 0.5)
+    ax[0].set_xlabel('L$_{rad/1.4GHz}$/ W/Hz',fontsize = 12)
+    ax[0].set_ylabel('(L$_{IR}$) W',fontsize = 12)
 
     
-    m_1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'mstars_tot']
-    sfr_1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'sfr']
+    mid_m,med_sfr,low_sfr,high_sfr = median_line(mst_SL,sfr_SL,False,False)
+    ax[1].plot(mid_m,med_sfr,'blue')
+    ax[1].fill_between(mid_m,low_sfr,high_sfr,color = 'blue',alpha = 0.5)
+    ax[1].errorbar(mst_L,sfr_L, xerr =0.2,yerr = 0.2,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.5)
+    ax[1].set_xlabel("Stellar Mass/$M_\odot$",fontsize = 12)
+    ax[1].set_ylabel("SFR/$M_\odot$/yr",fontsize = 12)
     
-    m_2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'mstars_tot']
-    sfr_2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'sfr']
-    
-    m_1 = np.log10(m_1)
-    m_2 = np.log10(m_2)
-    
-    sfr_1 = np.log10(sfr_1)
-    sfr_2 = np.log10(sfr_2)
-    
-    qir1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'qir_bress']
-    qir2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'qir_bress']
-    
-    
-    m_lf_1 = np.log10(df_lf.loc[(df_lf['z'] < 1.5),'M_star'])
-    m_lf_2 = np.log10(df_lf.loc[(df_lf['z'] > 1.5),'M_star'])
-    
-    sfr_lf_1 = np.log10(df_lf.loc[(df_lf['z'] < 1.5),'SFR10'])
-    sfr_lf_2 = np.log10(df_lf.loc[(df_lf['z'] > 1.5),'SFR10'])
-    
-    qir_lf_1 = df_lf.loc[(df_lf['z'] < 1.5),'qTIR']
-    qir_lf_2 = df_lf.loc[(df_lf['z'] > 1.5),'qTIR']
-    
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(m_1,sfr_1,False,False)
-
-    c = ax[1,0].hexbin(sfr_1,m_1,mincnt = 1, cmap='rainbow', gridsize = 30)
-    ax[1,0].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[1,0].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[1,0].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[1,0].scatter(m_lf_1,qir_lf_1,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-
-    ax[1,0].set_xlim(8,12)
-    ax[1,0].set_ylim(0,3.5)
-    ax[1,0].set_xlabel("Log10(Stellar Mass/$M_\odot$)")
-    ax[1,0].set_ylabel("qir")
-    ax[1,0].set_title("z ~ 1")
-    
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(m_2,sfr_2,False,False)
-    
-    ax[1,1].hexbin(sfr_2,m_2,mincnt = 1, cmap='Greys', gridsize = 30)
-    ax[1,1].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[1,1].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[1,1].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[1,1].scatter(m_lf_2,qir_lf_2,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-    ax[1,1].set_xlim(8,12)
-    ax[1,1].set_ylim(0,3.5)
-    ax[1,1].set_xlabel("Log10(Stellar Mass/$M_\odot$)")
-    ax[1,1].set_ylabel("Log10(SFR/$M_\odot$/yr)")
-    ax[1,1].set_title("z ~ 2")
-    
-    fig.text(0.4, 0.9, "LIR vs. Lrad",weight='bold')
-    fig.text(0.4, 0.475, "SFR vs. Stellar Mass$",weight='bold')
-    
-    cb = fig.colorbar(c, ax=ax.ravel().tolist())
-    cb.set_label('Number Count')
-   # fig.text(0.5, 0.04, "Log10(Stellar Mass/$M_\odot$) ", ha='center')
-   # fig.text(0.04, 0.5, "qir", va='center', rotation='vertical')
-   # fig.suptitle('qir vs. Stellar Mass - Lo Faro et al.')
+    fig.set_size_inches(11, 5)
+    plt.tight_layout()
+    plt.savefig('plots/Lo_Faro_LIRG.pdf')
     plt.show()
     
-    m_1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'mstars_tot']
-    sfr_1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'sfr']
-    
-    m_2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'mstars_tot']
-    sfr_2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'sfr']
-    
-    m_1 = np.log10(m_1)
-    m_2 = np.log10(m_2)
-    
-    sfr_1 = np.log10(sfr_1)
-    sfr_2 = np.log10(sfr_2)
-    
-    qir1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 0.909822023685613)),'qir_bress']
-    qir2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)&(df['z'] == 2.00391410007239)),'qir_bress']
-    
-    fig, ax = plt.subplots(2,2)
-    fig.set_size_inches(15, 11)
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(sfr_1,qir1,False,False)
-    
-    c = ax[0,0].hexbin(sfr_1,qir1,mincnt = 1, cmap='rainbow', gridsize = 30)
-    ax[0,0].scatter(sfr_lf_1,qir_lf_1,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-    ax[0,0].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[0,0].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[0,0].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-   # ax[0,0].set_xlim(1,3)
-   # ax[0,0].set_ylim(0,3.5)
-    ax[0,0].set_title("z ~ 1")
-    ax[0,0].set_xlabel("Log10(SFR/$M_\odot$/yr)")
-    ax[0,0].set_ylabel("qir")
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(sfr_2,qir2,False,False)
-    ax[0,1].hexbin(sfr_2,qir2,mincnt = 1, cmap='rainbow', gridsize = 30,vmin = 0, vmax = 1000)
-    ax[0,1].scatter(sfr_lf_2,qir_lf_2,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-    ax[0,1].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[0,1].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[0,1].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[0,1].set_xlabel("Log10(SFR/$M_\odot$/yr)")
-    ax[0,1].set_ylabel("qir")
-  #  ax[0,1].set_xlim(1,3)
-  #  ax[0,1].set_ylim(0,3.5)
-    ax[0,1].set_title("z ~ 2")
+    plt.clf()
     
     
-    qir1 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)),'qir_bress']
-    qir2 = df.loc[((df['fir_flux']>3e37)& (df['mstars_tot']>2e8)),'qir_bress']
-    
-    
-    m_lf_1 = np.log10(df_lf.loc[(df_lf['z'] < 1.5),'M_star'])
-    m_lf_2 = np.log10(df_lf.loc[(df_lf['z'] > 1.5),'M_star'])
-    
-    sfr_lf_1 = np.log10(df_lf.loc[(df_lf['z'] < 1.5),'SFR10'])
-    sfr_lf_2 = np.log10(df_lf.loc[(df_lf['z'] > 1.5),'SFR10'])
-    
-    qir_lf_1 = df_lf.loc[(df_lf['z'] < 1.5),'qTIR']
-    qir_lf_2 = df_lf.loc[(df_lf['z'] > 1.5),'qTIR']
-    
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(m_1,qir1,False,False)
-
-    c = ax[1,0].hexbin(m_1,qir1,mincnt = 1, cmap='rainbow', gridsize = 30,vmin = 0, vmax = 1000)
-    ax[1,0].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[1,0].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[1,0].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[1,0].scatter(m_lf_1,qir_lf_1,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-
-  #  ax[1,0].set_xlim(8,12)
-  #  ax[1,0].set_ylim(0,3.5)
-    ax[1,0].set_xlabel("Log10(Stellar Mass/$M_\odot$)")
-    ax[1,0].set_ylabel("qir")
-    ax[1,0].set_title("z ~ 1")
-    
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(m_2,qir2,False,False)
-    
-    ax[1,1].hexbin(m_2,qir2,mincnt = 1, cmap='Greys', gridsize = 30,vmin = 0, vmax = 1000)
-    ax[1,1].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[1,1].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[1,1].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[1,1].scatter(m_lf_2,qir_lf_2,marker="o",label = 'GAMA Data',color='white', edgecolor='black')
-    #ax[1,1].set_xlim(8,12)
-    #ax[1,1].set_ylim(0,3.5)
-    ax[1,1].set_xlabel("Log10(Stellar Mass/$M_\odot$)")
-    ax[1,1].set_ylabel("qir")
-    ax[1,1].set_title("z ~ 2")
-    
-    fig.text(0.4, 0.9, "qir vs. SFR", weight='bold')
-    fig.text(0.4, 0.475, "qir vs. Stellar Mass", weight='bold')
-    
-    cb = fig.colorbar(c, ax=ax.ravel().tolist())
-    cb.set_label('Number Count')
-   # fig.text(0.5, 0.04, "Log10(Stellar Mass/$M_\odot$) ", ha='center')
-   # fig.text(0.04, 0.5, "qir", va='center', rotation='vertical')
-   # fig.suptitle('qir vs. Stellar Mass - Lo Faro et al.')
+    mid_m,med_qir,low_qir,high_qir = median_line(mst_SL,qir_SL,False,False)
+    plt.plot(mid_m,med_qir,'blue')
+    plt.fill_between(mid_m,low_qir,high_qir,color = 'blue',alpha = 0.5, label = 'SHARK')
+    plt.errorbar(mst_L,qir_L, xerr = 0.2,yerr = 0.26,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.5)
+    plt.xlabel("Stellar Mass/$M_\odot$",fontsize = 12)
+    plt.ylabel("qir",fontsize = 12)
+    fig.set_size_inches(10, 10)
+    plt.savefig('plots/Lo_Faro_LIRG_mstar_qir.pdf')
     plt.show()
+    plt.clf()
     
   
+    ###Creating plots for ULIRGs
+
+    fig, ax = plt.subplots(1,2)
+    
+    mid_rad,med_fir,low_fir,high_fir = median_line(rad_SU,lir_SU,False,False)
+    #ax[0,0].hexbin(rad_bress,fir_bress,mincnt = 1, xscale='log',yscale='log',cmap='rainbow', gridsize = 30,vmin= vmin, vmax = vmax)
+    ax[0].plot(mid_rad,med_fir,'blue')
+    ax[0].fill_between(mid_rad,low_fir,high_fir,color = 'blue',alpha = 0.5)
+    ax[0].errorbar(rad_U,lir_U, xerr = 0.13,yerr = 0.13,fmt="o",markerfacecolor='white', markeredgecolor='black',label = 'Lor Faro et al.',ecolor='black',elinewidth = 0.5)
+    ax[0].set_xlabel('L$_{rad/1.4GHz}$/ W/Hz',fontsize = 12)
+    ax[0].set_ylabel('(L$_{IR}$) W',fontsize = 12)
+    
+    mid_m,med_sfr,low_sfr,high_sfr = median_line(mst_SU,sfr_SU,False,False)
+    ax[1].plot(mid_m,med_sfr,'blue')
+    ax[1].fill_between(mid_m,low_sfr,high_sfr,color = 'blue',alpha = 0.5)
+    ax[1].errorbar(mst_U,sfr_U, xerr =0.2,yerr = 0.2,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.5)
+    ax[1].set_xlabel("Stellar Mass/$M_\odot$",fontsize = 12)
+    ax[1].set_ylabel("SFR/$M_\odot$/yr",fontsize = 12)
+
+    
+    fig.set_size_inches(11, 5)
+    plt.tight_layout()
+    plt.savefig('plots/Lo_Faro_ULIRG.pdf')
+    plt.show()
+    
+    plt.clf()
     
     
-    
+    mid_m,med_qir,low_qir,high_qir = median_line(mst_SU,qir_SU,False,False)
+    plt.plot(mid_m,med_qir,'blue')
+    plt.fill_between(mid_m,low_qir,high_qir,color = 'blue',alpha = 0.5, label = 'SHARK')
+    plt.errorbar(mst_U,qir_U, xerr = 0.2,yerr = 0.26,fmt="o",label = 'GAMA Data',markerfacecolor='white', markeredgecolor='black',ecolor = 'black',elinewidth = 0.5)
+    plt.xlabel("Stellar Mass/$M_\odot$",fontsize = 12)
+    plt.ylabel("qir",fontsize = 12)
+    fig.set_size_inches(10, 10)
+    plt.savefig('plots/Lo_Faro_ULIRG_mstar_qir.pdf')
+    plt.show()
+    plt.clf()
+
 def qir_plots(df):
     
     mstars = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 3)&(df['qir_bress'] > 0)),'mstars_tot'])
@@ -958,7 +915,257 @@ def qir_plots(df):
     
     plt.show()
 
+
     
+    
+    
+def qir_mstar(df):
+    mlst = [1e8,1e9,1e10,1e11,1e12]
+    df_line = pd.DataFrame()
+    fig, ax = plt.subplots(1,2)
+    
+    colours = ['blue','red','orange','magenta','teal','cyan','olive','yellow','grey','white']
+    
+    for m in range(len(mlst)-1):
+        
+        m1 = mlst[m]
+        m2 = mlst[m+1]
+        
+        qir_all_med = []
+        qir_all_upp = []
+        qir_all_low = []
+        
+        qir_sfg_med = []
+        qir_sfg_upp = []
+        qir_sfg_low = []
+        ###getting the data at different redshifts###
+        for z in zlist:
+            
+            qir_all = df.loc[((df['mstars_tot']>m1)&(df['mstars_tot']<m2)&(df['z']==z)),'qir_bress'] #all galaxies
+            try:
+                qir_all_med.append(np.median(qir_all))
+                qir_all_upp.append(np.percentile(qir_all,84))
+                qir_all_low.append(np.percentile(qir_all,16))
+            except:
+                qir_all_med.append(np.nan)
+                qir_all_upp.append(np.nan)
+                qir_all_low.append(np.nan)                
+            
+            
+            qir_sfg = df.loc[((df['mstars_tot']>m1)&(df['mstars_tot']<m2)&(df['z']==z)&(df['sfg/q'] =='sf')),'qir_bress'] #all SFG
+            try:
+                qir_sfg_med.append(np.median(qir_sfg))
+                qir_sfg_upp.append(np.percentile(qir_sfg,84))
+                qir_sfg_low.append(np.percentile(qir_sfg,16))            
+            except:
+                qir_sfg_med.append(np.nan)
+                qir_sfg_upp.append(np.nan)
+                qir_sfg_low.append(np.nan)   
+                
+        qir_all_med_lab = 'qir_all_med_m1_' + str(m1)
+        qir_all_low_lab = 'qir_all_med_m1_' + str(m1)
+        qir_all_upp_lab = 'qir_all_med_m1_' + str(m1) 
+
+        qir_sfg_med_lab = 'qir_sfg_med_z_' + str(m1) 
+        qir_sfg_low_lab = 'qir_sfg_med_z_' + str(m1) 
+        qir_sfg_upp_lab = 'qir_sfg_med_z_' + str(m1)
+
+        df_line[qir_all_med_lab] = qir_all_med
+        df_line[qir_all_low_lab] = qir_all_low
+        df_line[qir_all_upp_lab] = qir_all_upp       
+
+        df_line[qir_sfg_med_lab] = qir_sfg_med
+        df_line[qir_sfg_low_lab] = qir_sfg_low
+        df_line[qir_sfg_upp_lab] = qir_sfg_upp      
+        
+        
+        ###plotting the different mass bins###
+        label = str(np.log10(m1)) + " $\leq$ $Log_{10}$(M/$M_\odot$) $\leq$ " + str(np.log10(m2))
+        ax[0].plot(zlist,qir_all_med,color = black,linewidth = 5)
+        ax[0].plot(zlist,qir_all_med,color = colours[m],linewidth = 3,label = label)
+        
+        ax[0].fill_between(zlist,qir_all_upp,qir_all_low,color = colours[m],alpha = 0.5)
+        ax[1].plot(zlist,qir_sfg_med,color = black,linewidth = 5,label = label)        
+        ax[1].plot(zlist,qir_sfg_med,color = colours[m],linewidth = 3,label = label)
+        ax[1].fill_between(zlist,qir_sfg_upp,qir_sfg_low,color = colours[m],alpha = 0.5)
+    
+    ax[0].text(1,3.25,'All Galaxies')
+    ax[1].text(1,3.25,'SFGs')    
+    
+    ax[0].set_xlabel("z",fontsize = 20)
+    ax[1].set_xlabel("z",fontsize = 20)
+    ax[0].set_ylabel("qir",fontsize = 20)
+    
+    ax[0].set_xlim(0,5)
+    ax[0].set_ylim(0,3.5)
+    ax[1].set_xlim(0,5)
+    ax[1].set_ylim(0,3.5)
+    ax[0].tick_params(labelsize=15)
+    ax[1].tick_params(labelsize=15) 
+    ax[1].tick_params(labelleft=False)
+    leg = ax[1].legend(loc='lower left',frameon = False)
+    leg.get_frame().set_linewidth(0.0)
+    plt.subplots_adjust(wspace=0, hspace=0)
+    fig.set_size_inches(15, 10)
+    plt.savefig('plots/qir_z_mstar.pdf')
+    plt.show()
+        
+    df_line.to_csv('qir_z_mstar_lines.csv')
+
+def qir_mstar_ulirgs(df):
+    mlst = [1e8,1e9,1e10,1e11,1e12]
+    df_line = pd.DataFrame()
+    fig, ax = plt.subplots(1,2)
+    
+    colours = ['blue','red','orange','magenta','teal','cyan','olive','yellow','grey','white']
+    
+    for m in range(len(mlst)-1):
+        
+        m1 = mlst[m]
+        m2 = mlst[m+1]
+        
+        qir_all_med = []
+        qir_all_upp = []
+        qir_all_low = []
+        
+        qir_sfg_med = []
+        qir_sfg_upp = []
+        qir_sfg_low = []
+        ###getting the data at different redshifts###
+        for z in zlist:
+            
+            qir_all = df.loc[((df['mstars_tot']>m1)&(df['mstars_tot']<m2)&(df['z']==z)&(df['fir_lum']>1e11*Lsun)&(df['fir_lum']<1e12*Lsun),'qir_bress')] #lirgs
+            try:
+                qir_all_med.append(np.median(qir_all))
+                qir_all_upp.append(np.percentile(qir_all,84))
+                qir_all_low.append(np.percentile(qir_all,16))
+            except:
+                qir_all_med.append(np.nan)
+                qir_all_upp.append(np.nan)
+                qir_all_low.append(np.nan)                
+            
+            
+            qir_sfg = df.loc[((df['mstars_tot']>m1)&(df['mstars_tot']<m2)&(df['z']==z)&(df['fir_lum']>1e12*Lsun)&(df['fir_lum']<1e13*Lsun)),'qir_bress'] #ulirgs
+            try:
+                qir_sfg_med.append(np.median(qir_sfg))
+                qir_sfg_upp.append(np.percentile(qir_sfg,84))
+                qir_sfg_low.append(np.percentile(qir_sfg,16))            
+            except:
+                qir_sfg_med.append(np.nan)
+                qir_sfg_upp.append(np.nan)
+                qir_sfg_low.append(np.nan)   
+                
+        qir_all_med_lab = 'qir_lirg_med_m1_' + str(m1)
+        qir_all_low_lab = 'qir_lirg_low_m1_' + str(m1)
+        qir_all_upp_lab = 'qir_lirg_upp_m1_' + str(m1) 
+
+        qir_sfg_med_lab = 'qir_ulirg_med_z_' + str(m1) 
+        qir_sfg_low_lab = 'qir_ulirg_low_z_' + str(m1) 
+        qir_sfg_upp_lab = 'qir_ulirg_upp_z_' + str(m1)
+
+        df_line[qir_all_med_lab] = qir_all_med
+        df_line[qir_all_low_lab] = qir_all_low
+        df_line[qir_all_upp_lab] = qir_all_upp       
+
+        df_line[qir_sfg_med_lab] = qir_sfg_med
+        df_line[qir_sfg_low_lab] = qir_sfg_low
+        df_line[qir_sfg_upp_lab] = qir_sfg_upp      
+        
+        
+        ###plotting the different mass bins###
+        label = str(np.log10(m1)) + " $\leq$ $Log_{10}$(M/$M_\odot$) $\leq$ " + str(np.log10(m2))
+        ax[0].plot(zlist,qir_all_med,color = black,linewidth = 5)
+        ax[0].plot(zlist,qir_all_med,color = colours[m],linewidth = 3,label = label)
+        
+        ax[0].fill_between(zlist,qir_all_upp,qir_all_low,color = colours[m],alpha = 0.5)
+        ax[1].plot(zlist,qir_sfg_med,color = black,linewidth = 5,label = label)        
+        ax[1].plot(zlist,qir_sfg_med,color = colours[m],linewidth = 3,label = label)
+        ax[1].fill_between(zlist,qir_sfg_upp,qir_sfg_low,color = colours[m],alpha = 0.5)
+    
+    ax[0].text(1,3.25,'All Galaxies')
+    ax[1].text(1,3.25,'SFGs')    
+    
+    ax[0].set_xlabel("z",fontsize = 20)
+    ax[1].set_xlabel("z",fontsize = 20)
+    ax[0].set_ylabel("qir",fontsize = 20)
+    
+    ax[0].set_xlim(0,5)
+    ax[0].set_ylim(0,3.5)
+    ax[1].set_xlim(0,5)
+    ax[1].set_ylim(0,3.5)
+    ax[0].tick_params(labelsize=15)
+    ax[1].tick_params(labelsize=15) 
+    ax[1].tick_params(labelleft=False)
+    leg = ax[1].legend(loc='lower left',frameon = False)
+    leg.get_frame().set_linewidth(0.0)
+    plt.subplots_adjust(wspace=0, hspace=0)
+    fig.set_size_inches(15, 10)
+    plt.savefig('plots/qir_z_mstar_ulirgs.pdf')
+    plt.show()
+        
+    df_line.to_csv('qir_z_mstar_ulirgs.csv')
+
+                              
+def sfr_m_hex(df):
+    
+    z = 0
+    
+    mst = np.log10(df.loc[((df['z']==z)&(df['mstars_tot'] > 10**(8))&(df['mstars_tot'] < 10**(12)),'mstars_tot')])
+    qir = df.loc[((df['z']==z)&(df['mstars_tot'] > 10**(8))&(df['mstars_tot'] < 10**(12)),'qir_bress')] 
+    sfr = np.log10(df.loc[((df['z']==z)&(df['mstars_tot'] > 10**(8))&(df['mstars_tot'] < 10**(12)),'sfr')])                              
+    mid_mst,med_sfr,low_sfr,upp_sfr = median_line(mst,sfr,False,False)
+    
+    for z in zlist:
+        print("Finding SFG for z = ",str(round(z,2)))
+        
+        sfg_df = df[['sfr','mstars_tot']] [((df['z'] == z)&(df['mstars_tot'] > 10**(9))&(df['mstars_tot'] < 10**(10))&(df['type'] == 0)) ]
+        
+        sfr1 = sfg_df['sfr']
+        mst1 = sfg_df['mstars_tot']
+        sfr1 = np.log10(sfr1)
+        mst1 = np.log10(mst1)
+
+        a,b = np.polyfit(mst1,sfr1,1)
+    
+    
+    fig, ax = plt.subplots(1,2)             
+    
+    mst_def = np.linspace(8,12)
+    sfr_def = a*mst_def + b
+    
+    
+    c = ax[0].hexbin(mst,sfr,cmap = 'rainbow', gridsize = 30,mincnt = 10)
+    ax[0].plot(mid_mst,med_sfr,color = 'black',linewidth = 5)
+    ax[0].plot(mid_mst,upp_sfr,color = 'black',linewidth = 5,linestyle = 'dashed')    
+    ax[0].plot(mid_mst,low_sfr,color = 'black',linewidth = 5,linestyle = 'dashed')
+    ax[0].plot(mst_def,sfr_def,color = 'red',linewidth = 3,path_effects=[pe.Stroke(linewidth=5, foreground='black'), pe.Normal()])
+    ax[0].set_ylabel('SFR',fontsize = 20)
+    ax[0].set_ylabel('Stellar Mass',fontsize = 20)   
+    
+    cb = fig.colorbar(c,ax=ax[0])
+    cb.set_label('Number Count',fontsize = 20)
+    
+    ax[0].set_xlim(8,12)
+    
+    
+    c = ax[1].hexbin(mst,sfr,C=qir, gridsize = 30,reduce_C_function=np.median,mincnt = 10)
+    ax[1].plot(mid_mst,med_sfr,color = 'black',linewidth = 5)
+    ax[1].plot(mid_mst,upp_sfr,color = 'black',linewidth = 5,linestyle = 'dashed')    
+    ax[1].plot(mid_mst,low_sfr,color = 'black',linewidth = 5,linestyle = 'dashed')   
+    ax[1].plot(mst_def,sfr_def,color = 'red',linewidth = 3,path_effects=[pe.Stroke(linewidth=5, foreground='black'), pe.Normal()])
+    cb = fig.colorbar(c,ax=ax[1])
+    cb.set_label('Number Count',fontsize = 20)
+    ax[1].set_ylabel('SFR',fontsize = 20)
+    ax[1].set_ylabel('Stellar Mass',fontsize = 20)       
+    ax[1].set_xlim(8,12)
+        
+    #plt.subplots_adjust(wspace=0, hspace=0)
+    fig.set_size_inches(12, 12)
+    plt.tight_layout()   
+    plt.savefig("plots/sfr_m_hex.pdf")
+    plt.show()
+                              
+                              
 def central_counter(lst):
     lst_len = len(lst)
     counter = 0
@@ -968,7 +1175,7 @@ def central_counter(lst):
     
     return counter/lst_len
     
-    
+
 def met_dist_cent(df):
     
     fig, ax = plt.subplots(1,3)
@@ -1019,12 +1226,12 @@ def met_dist_cent(df):
     
     fig, ax = plt.subplots(1,3)
     
-    mstars = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] =='sf')),'mstars_tot'])
-    qir = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] =='sf')),'qir_bress']
-    metallicity = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] =='sf')),'gas_metal'])
-    teff = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] =='sf')),'Teff']
-    typ = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] =='sf')),'type']
-    dist_ms = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] =='sf')),'sf_test']
+    mstars = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] =='sf')),'mstars_tot'])
+    qir = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] =='sf')),'qir_bress']
+    metallicity = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] =='sf')),'gas_metal'])
+    teff = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] =='sf')),'Teff']
+    typ = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] =='sf')),'type']
+    dist_ms = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e7)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] =='sf')),'sf_test']
     
     
     
@@ -1112,94 +1319,100 @@ def sfr_function(df,h0,volh):
     dm = 0.25
     mbins = np.arange(mlow, mupp, dm)
     xmf = mbins + dm/2.0 #setting up the bins
-    
+    df_line = pd.DataFrame()
     slow = -3
     supp = 3
     
-    for z in zlist:
-        if z < 1:
+    sf_df = pd.read_csv('SFR_function2.csv')
+    sf_df['z'] = round(sf_df['Z'])
+    sf_df['source_2'] = sf_df['source'] + ' z = ' + sf_df['Z'].astype(str)
 
-            sbins = np.arange(slow, supp, dm)
-            xmf = sbins + dm/2.0 #setting up the bins
-            sfr = np.log10(df.loc[((df['z'] == z)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e12)),'sfr'])
-            shist,_ = np.histogram(sfr, bins=np.append(sbins,supp)) #creating a histogram between the logged dataset and the bins
-            shist = shist/vol/dm
-
-            
-            line, = plt.plot(xmf,shist)
-            line.set_label('label = str(round(z,3)')
-
-
-    sf_df = pd.read_csv('Documents/Masters/Masters_Thesis/SFR_function2.csv')
-    source_lst_z1 = ['Sobral et al. (2013, H α)','Patel et al. (2013, IR)','Gruppioni et al. (2013, IR)','Mauch & Sadler (2007, Radio)','Patel et al. (2013, IR)','Marchetti et al. (2016, IR)','Robotham et al. (2011, UV)']
-    fmt_lst = ['s','o','d','P','*','h','X']
+    zlst = [0,1,2,3,5,6,7,8]
+    fig, ax = plt.subplots(3,3)
+    fmt_lst = ['o','^','s','P','p','X','D','>','<','v']
+    col_lst = ['blue','red','orange','magenta','teal','cyan','olive','yellow','grey','white']
+    source_lst = np.sort(np.unique(sf_df['source'])) #source list
+    source_lst2 = np.sort(np.unique(sf_df['source_2'])) #source list
     q = 0
-
-    for source in source_lst_z1:
-        
-        z = np.mean(sf_df.loc[(sf_df['source'] == source),'Z'])
-        sfr = np.log10(sf_df.loc[(sf_df['source'] == source),'SFR'])
-        sfrf = sf_df.loc[(sf_df['source'] == source),'SFRF']*10**(-2)
-        sfrf_err_upp = sf_df.loc[(sf_df['source'] == source),'SFR_err_upp']*10**(-2)
-        sfrf_err_low = sf_df.loc[(sf_df['source'] == source),'SFR_err_low']*10**(-2)
-
-        fmt = fmt_lst[q]
-        
-        label = 'z = ' + str(round(z,3)) + ' ' + source
-        
-        points = plt.errorbar(sfr,sfrf,yerr = [sfrf_err_upp,sfrf_err_low],fmt=fmt,markerfacecolor='white', markeredgecolor='black',ecolor = 'black')
-        points.set_label(label)
-        q +=1
-    plt.title("SFR Function for z < 1")
-    plt.xlabel("$Log_{10}$(SFR) ($M_\odot yr^{-1}$)")
-    plt.ylabel('Φ ($Mpc^{-3}$)')
-    plt.yscale('log')
-    plt.legend()
-    plt.show()
-
     
-    for z in zlist:
-        if z > 1:
-
-            sbins = np.arange(slow, supp, dm)
-            xmf = sbins + dm/2.0 #setting up the bins
-            sfr = np.log10(df.loc[((df['z'] == z)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e12)),'sfr'])
-            shist,_ = np.histogram(sfr, bins=np.append(sbins,supp)) #creating a histogram between the logged dataset and the bins
-            shist = shist/vol/dm
-
-            
-            plt.plot(xmf,shist,label = str(round(z,3)))
-
-
-    sf_df = pd.read_csv('Documents/Masters/Masters_Thesis/SFR_function2.csv')
-    source_lst_z1 = ['Sobral et al. (2013, H α)','Patel et al. (2013, IR)','Gruppioni et al. (2013, IR)','Mauch & Sadler (2007, Radio)','Patel et al. (2013, IR)','Marchetti et al. (2016, IR)','Robotham et al. (2011, UV)']
-    zlist_2 = [1.3,1.9,2.6,5,6,7,8]
-    fmt_lst = ['s','o','d','P','*','h','X']
-    q = 0
-
-    for z in zlist_2:
+    
+    for z in zlst:
+        g = q//3
+        h = q%3
+        sbins = np.arange(slow, supp, dm)
+        xmf = sbins + dm/2.0 #setting up the bins
+        sfr = np.log10(df.loc[((round(df['z']) == z)),'sfr'])
+        n = 100
+        high_sfr,low_sfr,med_sfr = bootstrap(sfr,sbins,supp,n,False)
         
-        z = np.mean(sf_df.loc[(sf_df['Z'] == z),'Z'])
-        sfr = np.log10(sf_df.loc[(sf_df['Z'] == z),'SFR'])
-        sfrf = sf_df.loc[(sf_df['Z'] == z),'SFRF']*10**(-2)
-        sfrf_err_upp = sf_df.loc[(sf_df['Z'] == z),'SFR_err_upp']*10**(-2)
-        sfrf_err_low = sf_df.loc[(sf_df['Z'] == z),'SFR_err_low']*10**(-2)
+        med_sfr = np.log10(med_sfr/vol/dm)
+        high_sfr = np.log10(high_sfr/vol/dm)
+        low_sfr = np.log10(low_sfr/vol/dm)
+        
+        bin_lab = 'sbins_'+str(round(z))
+        med_lab = 'med_sfr'+str(round(z))        
+        low_lab = 'low_sfr'+str(round(z))
+        upp_lab = 'upp_sfr'+str(round(z))
+        
+        df_line[bin_lab] = sbins
+        df_line[med_lab] = med_sfr
+        df_line[low_lab] = low_sfr
+        df_line[upp_lab] = high_sfr
+        
+        ax[g,h].plot(xmf,med_sfr,color = 'blue',label = 'SHARK')
+        ax[g,h].fill_between(xmf,low_sfr,high_sfr,color = 'blue',alpha = 0.5)
 
-        fmt = fmt_lst[q]
-        if z < 3:
-            label = 'z = ' + str(z) + ' - ' + 'Alavi et al. (2016, UV)'
-        else:
-            label = 'z = ' + str(z) + ' - ' + 'Bouwens et al. (2015, UV)'
 
-        plt.errorbar(sfr,sfrf,yerr = [sfrf_err_upp,sfrf_err_low],fmt=fmt,label = label,markerfacecolor='white', markeredgecolor='black',ecolor = 'black')
+        sf_df2 = sf_df[['SFR','SFRF','SFR_err_upp','SFR_err_low','source_2','source']] [((sf_df['z'] == z))]
+        k = 0
+    
+        sou_lst = np.sort(np.unique(sf_df2['source'])) #source list
+        sou_lst2 = np.sort(np.unique(sf_df2['source_2'])) #source list
+        for source, source2 in zip(sou_lst,sou_lst2):
+            idx = np.where(source_lst == source)[0][0]
 
-        q +=1
-    plt.title("SFR Function for z < 1")
-    plt.xlabel("$Log_{10}$(SFR) ($M_\odot yr^{-1}$)")
-    plt.ylabel('Φ ($Mpc^{-3}$)')
-    plt.yscale('log')
-    plt.legend()
+            sf_df3 = sf_df2[['SFR','SFRF','SFR_err_upp','SFR_err_low']] [((sf_df2['source_2'] == source2))]
+
+            sfr = np.log10(sf_df3['SFR'])
+            sfr_err = 0.3
+
+            sfrf = np.log10(sf_df3['SFRF']*10**(-2))
+            sfrf_err_upp = np.log10(sf_df3['SFRF']*10**(-2) + sf_df3['SFR_err_upp']*10**(-2)) - sfrf
+            sfrf_err_low = sfrf - np.log10(sf_df3['SFRF']*10**(-2) - sf_df3['SFR_err_low']*10**(-2))
+
+            sfrf_err = [sfrf_err_low,sfrf_err_upp]
+            fmt = fmt_lst[idx]
+            col = col_lst[idx]
+            label = source2
+            tit = 'z = ' + str(z)
+
+            ax[g,h].errorbar(sfr,sfrf,xerr = sfr_err,yerr=sfrf_err, fmt=fmt,markerfacecolor=col, markeredgecolor='black',label = label,elinewidth=2,ecolor = 'black')
+            ax[g,h].set_xlim(-4.3,2.8)
+            ax[g,h].set_ylim(-6.3,0.3)
+            ax[g,h].set_xlabel('$Log_{10}$(SFR)[$M_{\odot} yr^{-1}]$',size = 15)
+            ax[g,0].set_ylabel('$\dfrac{dn}{dLog_{10}(\phi_{SFR})}[Mpc^{-3}]$',size = 15)
+            ax[g,h].tick_params(bottom = True, top = True,direction = 'inout',labelsize=15)
+            ax[g,h].tick_params(which = 'minor',bottom = True, top = True,direction = 'inout')
+            ax[0,h].tick_params(labelbottom=False, top = True,labelsize=15) 
+            ax[0,h].tick_params(top = False)
+            ax[g,1].tick_params(labelleft=False)
+            ax[g,2].tick_params(labelleft=False)
+            ax[g,h].minorticks_on()
+            ax[g,h].text(1,-1,tit)
+            leg = ax[g,h].legend(frameon = False)
+            leg.get_frame().set_linewidth(0.0)
+            k+= 1
+        q += 1
+    plt.subplots_adjust(wspace=0, hspace=0)
+    fig.set_size_inches(20, 20)
+    plt.savefig('plots/sfr_function.pdf')
     plt.show()
+    
+    df_line.to_csv('sfr_func_SHARK.csv')
+
+
+
+
     
 def all_galaxies_gas_disks(df):
     
@@ -1310,16 +1523,16 @@ def sf_galaxies_gas_disks(df):
     n = 1
     
     fig, ax = plt.subplots(2,4)
-    mstars = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'mstars_tot'])
-    qir = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'qir_bress']
-    mmol_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'mmol_disk'])
-    matom_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'matom_disk'])
-    teff = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'Teff']
-    r_gas_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'r_gas_disk'])
-    mgas_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'mgas_disk'])
-    sfr = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'sfr'])
-    mgas_metals_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'mgas_metals_disk'])
-    gas_surf_dens = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfr/q'] == 'sf')),'gas_surf_dens'])
+    mstars = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'mstars_tot'])
+    qir = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'qir_bress']
+    mmol_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'mmol_disk'])
+    matom_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'matom_disk'])
+    teff = df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'Teff']
+    r_gas_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'r_gas_disk'])
+    mgas_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'mgas_disk'])
+    sfr = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'sfr'])
+    mgas_metals_disk = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'mgas_metals_disk'])
+    gas_surf_dens = np.log10(df.loc[((df['z'] == 0)&(df['mstars_tot'] > 1e8)&(df['mstars_tot'] < 1e9)&(df['qir_bress'] < 5)&(df['qir_bress'] > -1)&(df['sfg/q'] == 'sf')),'gas_surf_dens'])
    
     
     mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(mstars,qir,False,False)
@@ -1417,7 +1630,9 @@ def rad_lum_func_plt_z0(df,h0,volh):
     dm = 0.25
     mbins = np.arange(mlow, mupp, dm)
     xmf = mbins + dm/2.0 #setting up the bins
-
+    df_line = pd.DataFrame()
+    df_line['xmf'] = xmf
+    
     df2 = pd.read_csv("bonata_data_z0.csv")
     
     bonatoy = df2.loc[(df2['ref'] == 'Bonato2020'),'log_phi']
@@ -1440,9 +1655,11 @@ def rad_lum_func_plt_z0(df,h0,volh):
     novakerr_up = df2.loc[(df2['ref'] == 'Novak2017'),'err_sup_phi']
     novakerr_down = df2.loc[(df2['ref'] == 'Novak2017'),'err_inf_phi']
     
-    n = 1000
+    n = 100
     
-    bress_rad_lum = df.loc[(df['z'] == 0),'bress_rad_lum']
+    
+    
+    bress_rad_lum = df.loc[(df['z'] == 0),'rad_lum']
 
     blum = np.log10(bress_rad_lum) #logging the dataset
 
@@ -1450,36 +1667,38 @@ def rad_lum_func_plt_z0(df,h0,volh):
 
     bhist = bhist[0]/vol/dm
     
-    high_lst,low_lst,med_lst = bootstrap(np.array(blum),mbins,mupp,n,True)
+    high_lst,low_lst,med_lst = bootstrap(np.array(blum),mbins,mupp,n,False)
     
     high_lst = high_lst/vol/dm
     low_lst = low_lst/vol/dm
     med_lst = med_lst/vol/dm
-    
-    blum = np.log10(bress_rad_lum) #logging the dataset
-    
-    blum2 = blum + np.random.normal(loc=0.0, scale=0.2, size=len(blum))
 
-    bhist= np.histogram(blum, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
+    df_line['upp_noerr'] = high_lst
+    df_line['low_noerr'] = low_lst
+    df_line['med_noerr'] = med_lst
     
-    bhist2 = np.histogram(blum2, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
+    high_err,low_err,med_err = bootstrap(np.array(blum),mbins,mupp,n,True)
     
-    bhist = bhist[0]/vol/dm
-    
-    bhist2 = bhist2[0]/vol/dm
+    high_err = high_err/vol/dm
+    low_err = low_err/vol/dm
+    med_err = med_err/vol/dm
 
+    df_line['upp_err'] = high_err
+    df_line['low_err'] = low_err
+    df_line['med_err'] = med_err    
     
     
     
     plt.plot(xmf,np.log10(med_lst),'blue')
-    
     plt.fill_between(xmf,np.log10(low_lst),np.log10(high_lst),color = 'blue',alpha = 0.5)
-
+    plt.plot(xmf,np.log10(med_err),'orange')
+    plt.fill_between(xmf,np.log10(low_err),np.log10(high_err),color = 'orange',alpha = 0.5)
     
     
     
-    plt.plot(xmf,np.log10(bhist),'black',linestyle = 'dashed')
-    plt.plot(xmf,np.log10(bhist2),'red')
+    
+   # plt.plot(xmf,np.log10(bhist),'black',linestyle = 'dashed')
+    #plt.plot(xmf,np.log10(bhist2),'red')
 
     plt.errorbar(bonatox,bonatoy,yerr = [bonatoerr_down,bonatoerr_up],fmt="o",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Bonato et al. 2020')
     plt.errorbar(butlerx,butlery,yerr = [butlererr_down, butlererr_up],fmt="s",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Butler et al. 2019')
@@ -1489,204 +1708,24 @@ def rad_lum_func_plt_z0(df,h0,volh):
     plt.ylabel("log$_{10}$(Φ) (Mpc$^{-3}$ dex$^{-1}$)",size=13)
     plt.xlim(19,25)
     plt.ylim(-7,0)
-    plt.savefig("Plots/rad_lum_func_z0.pdf",format='pdf')
     plt.legend()
+    plt.savefig("plots/rad_lum_func_z0.pdf",format='pdf')
     plt.show()
+    df_line.to_csv('1d4GHz_rad_lum_func_0_data.csv')
     
 def bootstrap(ary,mbins,mupp,n,convolve):
-    i = 0
-    hst_lst = []
-    while i < n:
-
-            
-            
+    hist_array = np.zeros((n, len(mbins))) #creates an array that will be filled
+    for i in range(n):
         if convolve == True:    
-            random_ary = np.random.choice(ary, size=ary.shape, replace=True) + np.random.normal(loc=0.0, scale=0.2, size=len(ary)) #makes a random list from the provided list with replacement. Convolves it with a random gaussian
+            random_ary = np.random.choice(ary, size=ary.shape, replace=True) + np.random.normal(loc=0.0, scale=0.3, size=len(ary)) #makes a random list from the provided list with replacement. Convolves it with a random gaussian
         else:
             random_ary = np.random.choice(ary, size=ary.shape, replace=True) #makes a random list from the provided list with replacement.
-        rand_hist = np.histogram(random_ary,bins=np.append(mbins,mupp))[0] #creates a histogram                                                                                 
-        hst_lst.append(rand_hist)
-        
-        i += 1
-                                                                                                    
-    high_lst = []
-    low_lst = []
-    med_lst = []
+        hist_array[i] = np.histogram(random_ary,bins=np.append(mbins,mupp))[0] #creates a histogram                                                                                                                                                                                
+    high = np.percentile(hist_array,84,axis = 0)
+    low = np.percentile(hist_array,16,axis = 0)
+    med = np.median(hist_array,axis = 0)
+    return high,low,med
 
-    for j in range(len(mbins)):
-        bin_lst = [item[j] for item in hst_lst] #'transposes' hst lst; the result from each bin is put into a list which contains the other results from the same bin but from other histograms
-
-        high_lst.append(np.percentile(bin_lst,84))
-        low_lst.append(np.percentile(bin_lst,16)) 
-        med_lst.append(np.median(bin_lst)) #median line
-    
-    
-    return high_lst,low_lst,med_lst
-
-
-def rad_lum_func_plt_2(df,h0,volh):
-    vol = volh/h0**3
-    mlow = 0
-    mupp = 40
-    dm = 0.25
-    mbins = np.arange(mlow, mupp, dm)
-    xmf = mbins + dm/2.0 #setting up the bins
-   
-    fig, ax = plt.subplots(3,1)
-
-    df2 = pd.read_csv("bonata_data_z0.csv")
-    
-    bonatoy = df2.loc[(df2['ref'] == 'Bonato2020'),'log_phi']
-    bonatox = df2.loc[(df2['ref'] == 'Bonato2020'),'log_L_1.4']
-    bonatoerr_up = df2.loc[(df2['ref'] == 'Bonato2020'),'err_sup_phi']
-    bonatoerr_down = df2.loc[(df2['ref'] == 'Bonato2020'),'err_inf_phi']
-    
-    butlery = df2.loc[(df2['ref'] == 'Butler2019'),'log_phi']
-    butlerx = df2.loc[(df2['ref'] == 'Butler2019'),'log_L_1.4']
-    butlererr_up = df2.loc[(df2['ref'] == 'Butler2019'),'err_sup_phi']
-    butlererr_down = df2.loc[(df2['ref'] == 'Butler2019'),'err_inf_phi']
-
-    ocrany = df2.loc[(df2['ref'] == 'Ocran2020'),'log_phi']
-    ocranx = df2.loc[(df2['ref'] == 'Ocran2020'),'log_L_1.4']
-    ocranerr_up = df2.loc[(df2['ref'] == 'Ocran2020'),'err_sup_phi']
-    ocranerr_down = df2.loc[(df2['ref'] == 'Ocran2020'),'err_inf_phi']
-    
-    novaky = df2.loc[(df2['ref'] == 'Novak2017'),'log_phi']
-    novakx = df2.loc[(df2['ref'] == 'Novak2017'),'log_L_1.4']
-    novakerr_up = df2.loc[(df2['ref'] == 'Novak2017'),'err_sup_phi']
-    novakerr_down = df2.loc[(df2['ref'] == 'Novak2017'),'err_inf_phi']
-    
-    dale_rad_lum = df.loc[(df['z'] < 0.1),'dale_rad_lum']
-    
-    dlum = np.log10(dale_rad_lum) #logging the dataset
-
-    dhist,_= np.histogram(dlum, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
-    
-    print("This is dhist")
-    print(dhist)
-    
-    dhist = dhist/vol/dm
-    
-    
-    bress_rad_lum = df.loc[(df['z'] < 0.1),'bress_rad_lum']
-
-    blum = np.log10(bress_rad_lum) #logging the dataset
-
-    bhist= np.histogram(blum, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
-
-    bhist = bhist[0]/vol/dm
-    
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(xmf,np.log10(bhist),False,False)
-    ax[0].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[0].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[0].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    ax[0].errorbar(bonatox,bonatoy,yerr = [bonatoerr_down,bonatoerr_up],fmt="o",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Bonato et al. 2020')
-    ax[0].errorbar(butlerx,butlery,yerr = [butlererr_down, butlererr_up],fmt="s",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Butler et al. 2019')
-    ax[0].errorbar(ocranx,ocrany,yerr = [ocranerr_down, ocranerr_up],fmt="P",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Ocran et al. 2020')
-    ax[0].errorbar(novakx,novaky,yerr = [novakerr_down,novakerr_up],fmt="^",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Novak et al. 2020')
-    ax[0].set_title("z = 0")
-    ax[0].set_xlabel("Log$_{10}$($L_{1.4Ghz}$) (W/Hz)")
-    ax[0].set_ylabel("$Log_{10}$(Φ) ($Mpc^{-3} dex^{-1}$)")
-    ax[0].set_xlim(19,25)
-    ax[0].set_ylim(-7,0)
-    #ax[0,0].legend()
-    #ax[0,0].show()
-    
-    
-
-    
-    df2 = pd.read_csv("bonata_data_z1.csv")
-    
-    bonatoy = df2.loc[(df2['ref'] == 'Bonato2020'),'log_phi']
-    bonatox = df2.loc[(df2['ref'] == 'Bonato2020'),'log_L_1.4']
-    bonatoerr_up = df2.loc[(df2['ref'] == 'Bonato2020'),'err_sup_phi']
-    bonatoerr_down = df2.loc[(df2['ref'] == 'Bonato2020'),'err_inf_phi']
-
-    ocrany = df2.loc[(df2['ref'] == 'Ocran2020'),'log_phi']
-    ocranx = df2.loc[(df2['ref'] == 'Ocran2020'),'log_L_1.4']
-    ocranerr_up = df2.loc[(df2['ref'] == 'Ocran2020'),'err_sup_phi']
-    ocranerr_down = df2.loc[(df2['ref'] == 'Ocran2020'),'err_inf_phi']
-    
-    novaky = df2.loc[(df2['ref'] == 'Novak2017'),'log_phi']
-    novakx = df2.loc[(df2['ref'] == 'Novak2017'),'log_L_1.4']
-    novakerr_up = df2.loc[(df2['ref'] == 'Novak2017'),'err_sup_phi']
-    novakerr_down = df2.loc[(df2['ref'] == 'Novak2017'),'err_inf_phi']
-    
-    dale_rad_lum = df.loc[((df['z'] < 1.2)&(df['z'] > 0.8)),'dale_rad_lum']
-    
-    dlum = np.log10(dale_rad_lum) #logging the dataset
-
-    dhist= np.histogram(dlum, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
-    
-    print("This is dhist")
-    print(dhist)
-    
-    dhist = dhist[0]/vol/dm
-    
-    bress_rad_lum = df.loc[(df['z'] == 0.909822023685613),'bress_rad_lum']
-
-    blum = np.log10(bress_rad_lum) #logging the dataset
-
-    bhist= np.histogram(blum, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
-
-    bhist = bhist[0]/vol/dm
-    
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(xmf,np.log10(bhist),False,False)
-    ax[1].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[1].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[1].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    
-
-    ax[1].errorbar(bonatox,bonatoy,yerr = [bonatoerr_down,bonatoerr_up],fmt="o",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Bonato et al. 2020')
-   # ax[1].errorbar(butlerx,butlery,yerr = [butlererr_down, butlererr_up],fmt="s",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Butler et al. 2019')
-    ax[1].errorbar(ocranx,ocrany,yerr = [ocranerr_down, ocranerr_up],fmt="P",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Ocran et al. 2020')
-    ax[1].errorbar(novakx,novaky,yerr = [novakerr_down,novakerr_up],fmt="^",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Novak et al. 2020')
-    ax[1].set_title("z = 1")
-    ax[1].set_xlabel("Log$_{10}$($L_{1.4Ghz}$) (W/Hz)")
-    ax[1].set_ylabel("$Log_{10}$(Φ) ($Mpc^{-3} dex^{-1}$)")
-    ax[1].set_xlim(19,25)
-    ax[1].set_ylim(-7,0)
-
-    
-    df2 = pd.read_csv("bonata_data_z2.csv")
-    
-    bonatoy = df2.loc[(df2['ref'] == 'Bonato2020'),'log_phi']
-    bonatox = df2.loc[(df2['ref'] == 'Bonato2020'),'log_L_1.4']
-    bonatoerr_up = df2.loc[(df2['ref'] == 'Bonato2020'),'err_sup_phi']
-    bonatoerr_down = df2.loc[(df2['ref'] == 'Bonato2020'),'err_inf_phi']
-    
-    novaky = df2.loc[(df2['ref'] == 'Novak2017'),'log_phi']
-    novakx = df2.loc[(df2['ref'] == 'Novak2017'),'log_L_1.4']
-    novakerr_up = df2.loc[(df2['ref'] == 'Novak2017'),'err_sup_phi']
-    novakerr_down = df2.loc[(df2['ref'] == 'Novak2017'),'err_inf_phi']
-    
-    bress_rad_lum = df.loc[((df['z'] < 2.2)&(df['z']>1.8)),'bress_rad_lum']
-
-    blum = np.log10(bress_rad_lum) #logging the dataset
-
-    bhist= np.histogram(blum, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
-
-    bhist = bhist[0]/vol/dm
-    
-    mid_rad_lst,med_fir_lst,low_fir_lst,high_fir_lst = median_line(xmf,np.log10(bhist),False,False)
-    ax[2].plot(mid_rad_lst,med_fir_lst,'black')
-    ax[2].plot(mid_rad_lst,low_fir_lst,'black',linestyle='dashed')   
-    ax[2].plot(mid_rad_lst,high_fir_lst,'black',linestyle='dashed')
-    
-
-    ax[2].errorbar(bonatox,bonatoy,yerr = [bonatoerr_down,bonatoerr_up],fmt="o",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Bonato et al. 2020')
-   # ax[1].errorbar(butlerx,butlery,yerr = [butlererr_down, butlererr_up],fmt="s",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Butler et al. 2019')
-    ax[2].errorbar(ocranx,ocrany,yerr = [ocranerr_down, ocranerr_up],fmt="P",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Ocran et al. 2020')
-    ax[2].errorbar(novakx,novaky,yerr = [novakerr_down,novakerr_up],fmt="^",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Novak et al. 2020')
-    ax[2].set_title("z = 2")
-    ax[2].set_xlabel("Log$_{10}$($L_{1.4Ghz}$) (W/Hz)")
-    ax[2].set_ylabel("$Log_{10}$(Φ) ($Mpc^{-3} dex^{-1}$)")
-    ax[2].set_xlim(19,25)
-    ax[2].set_ylim(-7,0)
-
-    plt.legend()
-    plt.show()
-    
 def rad_lum_func_z(df,h0,volh):
     vol = volh/h0**3
     mlow = 0
@@ -1694,8 +1733,8 @@ def rad_lum_func_z(df,h0,volh):
     dm = 0.25
     mbins = np.arange(mlow, mupp, dm)
     xmf = mbins + dm/2.0 #setting up the bins
-    
-    
+    df_line = pd.DataFrame()
+    df_line['xmf'] = xmf
     #print("This is bress rad lum lst")
     #print(bress_rad_lum_lst)
     
@@ -1730,15 +1769,15 @@ def rad_lum_func_z(df,h0,volh):
     mbins = np.arange(mlow, mupp, dm)
     xmf = mbins + dm/2.0 #setting up the bins
    
-    fig, ax = plt.subplots(2,3)
+    fig, ax = plt.subplots(2,2)
 
-    zlist = [0, 0.909822023685613, 2.00391410007239, 3.0191633709527, 3.95972701662501, 5.02220991014863]
+    zlist = [0.909822023685613, 2.00391410007239, 3.0191633709527,3.95972701662501]
     q = 0
     n = 10
     for z in zlist:
         
-        g = q//3
-        h = q%3
+        g = q//2
+        h = q%2
         q += 1
         bon_data = 'bonata_data_z' + str(round(z)) + '.csv'
     
@@ -1787,79 +1826,1131 @@ def rad_lum_func_z(df,h0,volh):
             novakerr_up = np.NaN
             novakerr_down = np.NaN
 
-            n = 1000
+        n = 100
     
-        bress_rad_lum = df.loc[(df['z'] == z),'bress_rad_lum']
+        bress_rad_lum = df.loc[(df['z'] == z),'rad_lum']
 
         blum = np.log10(bress_rad_lum) #logging the dataset
     
-        high_lst,low_lst,med_lst = bootstrap(np.array(blum),mbins,mupp,n,True)
-    
+        high_err,low_err,med_err = bootstrap(np.array(blum),mbins,mupp,n,True)
+        high_lst,low_lst,med_lst = bootstrap(np.array(blum),mbins,mupp,n,False)   
+        
         high_lst = high_lst/vol/dm
         low_lst = low_lst/vol/dm
         med_lst = med_lst/vol/dm
+        
+        upp_lab = 'upp_noerr_' + str(round(z))
+        low_lab = 'low_noerr_' + str(round(z))
+        med_lab = 'med_noerr_' + str(round(z))
+        
+        df_line[upp_lab] = high_lst
+        df_line[low_lab] = low_lst
+        df_line[med_lab] = med_lst
+
+        high_err = high_err/vol/dm
+        low_err = low_err/vol/dm
+        med_err = med_err/vol/dm
+        
+        upp_lab = 'upp_err_' + str(round(z))
+        low_lab = 'low_err_' + str(round(z))
+        med_lab = 'med_err_' + str(round(z))
+        
+        df_line[upp_lab] = high_err
+        df_line[low_lab ] = low_err
+        df_line[med_lab] = med_err  
+        
+
     
-        blum = np.log10(bress_rad_lum) #logging the dataset
-        bhist= np.histogram(blum, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
-        bhist = bhist[0]/vol/dm #rad lum func with no convolution
-        
-        blum2 = blum + np.random.normal(loc=0.0, scale=0.2, size=len(blum))
-        bhist2 = np.histogram(blum2, bins=np.append(mbins,mupp)) #creating a histogram between the logged dataset and the bins
-        bhist2 = bhist2[0]/vol/dm #rad lum func with convolution
 
-        ax[g,h].plot(xmf,np.log10(med_lst),'blue',label = "bootstrapped median")
+        ax[g,h].plot(xmf,np.log10(med_lst),'blue',label = 'SHARK')
         ax[g,h].fill_between(xmf,np.log10(low_lst),np.log10(high_lst),color = 'blue',alpha = 0.5)
-        ax[g,h].plot(xmf,np.log10(bhist),'black',linestyle = 'dashed',label = "no convolution")
-        ax[g,h].plot(xmf,np.log10(bhist2),'red',label = 'convolution')
+        ax[g,h].plot(xmf,np.log10(med_err),'orange',label = 'SHARK + 0.3 dex')
+        ax[g,h].fill_between(xmf,np.log10(low_err),np.log10(high_err),color = 'orange',alpha = 0.5)
 
-        ax[g,h].errorbar(bonatox,bonatoy,yerr = [bonatoerr_down,bonatoerr_up],fmt="o",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Bonato et al. 2020')
-        ax[g,h].errorbar(butlerx,butlery,yerr = [butlererr_down, butlererr_up],fmt="s",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Butler et al. 2019')
-        ax[g,h].errorbar(ocranx,ocrany,yerr = [ocranerr_down, ocranerr_up],fmt="P",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Ocran et al. 2020')
-        ax[g,h].errorbar(novakx,novaky,yerr = [novakerr_down,novakerr_up],fmt="^",markerfacecolor='white', markeredgecolor='black',ecolor='black',label = 'Novak et al. 2020')
+        ax[g,h].errorbar(bonatox,bonatoy,yerr = [bonatoerr_down,bonatoerr_up],fmt="8",markerfacecolor='None', markeredgecolor='black',ecolor='black',label = 'Bonato et al. 2020',markersize='10')
+        ax[g,h].errorbar(butlerx,butlery,yerr = [butlererr_down, butlererr_up],fmt="s",markerfacecolor='None', markeredgecolor='black',ecolor='black',label = 'Butler et al. 2019',markersize='10')
+        ax[g,h].errorbar(ocranx,ocrany,yerr = [ocranerr_down, ocranerr_up],fmt="P",markerfacecolor='None', markeredgecolor='black',ecolor='black',label = 'Ocran et al. 2020',markersize='10')
+        ax[g,h].errorbar(novakx,novaky,yerr = [novakerr_down,novakerr_up],fmt="^",markerfacecolor='None', markeredgecolor='black',ecolor='black',label = 'Novak et al. 2020',markersize='10')
         
-        strz = 'z = '+ str(round(z))
+        z_label = 'z = '+ str(round(z))
         
-        ax[1,h].set_xlabel("log$_{10}$(L$_{1.4GHz}$) (W/Hz)",size=13)
-        ax[g,0].set_ylabel("log$_{10}$(Φ) (Mpc$^{-3}$ dex$^{-1}$)",size=13)
+        ax[1,h].set_xlabel("log$_{10}$(L$_{1.4GHz}$) (W/Hz)",size=20)
+        ax[g,0].set_ylabel("log$_{10}$(Φ) (Mpc$^{-3}$ dex$^{-1}$)",size=20)
         ax[1,h].tick_params(bottom = True, top = True)
         ax[0,h].tick_params(labelbottom=False) 
         ax[g,1].tick_params(labelleft=False) 
-        ax[g,2].tick_params(labelleft=False) 
-        ax[g,h].text(0.1,0.1,strz)
+        ax[g,h].text(24,-1,z_label) 
+
         ax[g,h].set_xlim(18.7,25.3)
         ax[g,h].set_ylim(-7.3,0.3)
+        leg = ax[1,0].legend(frameon=False)
+        leg.get_frame().set_linewidth(0.0)
     plt.subplots_adjust(wspace=0, hspace=0)
-    leg = ax[0,0].legend(loc='upper center', bbox_to_anchor=(1.65, -1.4), ncol=7)
+    fig.set_size_inches(12,12)
+
+    plt.savefig("plots/1d4GHz_rad_lum_func_multi_z.pdf")
+    plt.show()
+    
+    df_line.to_csv('1d4GHz_rad_lum_func_z_data.csv')
+    
+def delta_qir(df):
+    
+        
+    #zlst = [0, 0.194738848008908]
+    q = 0
+    
+    gal_id_0 = df.loc[((df['z'] == 0)&(df['sfg/q'] == 'sf')),'galaxy_id']
+
+    gal_id_19 = df.loc[((df['z'] == 0.194738848008908)&(df['sfg/q'] == 'sf')),'galaxy_id']
+    gi = df.loc[df['galaxy_id'].isin(gal_id_0)]
+    gal_id_19 = gi.loc[((df['z'] == 0.194738848008908)&(df['sfg/q'] == 'sf')),'galaxy_id']
+    gi = gi.loc[gi['galaxy_id'].isin(gal_id_19)]
+
+    gi = gi.sort_values(by=['galaxy_id'], ascending=True)
+    qir_0 = gi.loc[(gi['z'] == 0),'qir_bress']    
+    qir_19 = gi.loc[(gi['z'] == 0.194738848008908),'qir_bress']
+    gal_id = gi.loc[(gi['z'] == 0),'galaxy_id']    
+    delta_qir = np.array(qir_0) - np.array(qir_19)
+    print("This is length of delta qir")
+    print(len(delta_qir))
+    print("This is the length of galaxy_id")
+    print(len(gal_id))
+    plt.hexbin(gal_id,delta_qir,mincnt = 4, cmap='rainbow', gridsize = 30) 
+    plt.xlabel('galaxy id')
+    plt.ylabel('delta qir')
+    plt.title('z = 0 - z = 0.19')
+    plt.savefig('plots/delta_qir_0_19.pdf')
+    plt.show()
+    
+    
+    gal_id_0 = df.loc[((df['z'] == 0.909822023685613)&(df['sfg/q'] == 'sf')),'galaxy_id']
+
+    gal_id_19 = df.loc[((df['z'] == 0.194738848008908)&(df['sfg/q'] == 'sf')),'galaxy_id']
+    gi = df.loc[df['galaxy_id'].isin(gal_id_0)]
+    gal_id_19 = gi.loc[((df['z'] == 0.194738848008908)&(df['sfg/q'] == 'sf')),'galaxy_id']
+    gi = gi.loc[gi['galaxy_id'].isin(gal_id_19)]
+
+    gi = gi.sort_values(by=['galaxy_id'], ascending=True)
+    qir_0 = gi.loc[(gi['z'] == 0.909822023685613),'qir_bress']    
+    qir_19 = gi.loc[(gi['z'] == 0.194738848008908),'qir_bress']
+    gal_id = gi.loc[(gi['z'] == 0.909822023685613),'galaxy_id']    
+    delta_qir = np.array(qir_0) - np.array(qir_19)
+    print("This is length of delta qir")
+    print(len(delta_qir))
+    print("This is the length of galaxy_id")
+    print(len(gal_id))
+    plt.hexbin(gal_id,delta_qir,mincnt = 4, cmap='rainbow', gridsize = 30) 
+    plt.xlabel('galaxy id')
+    plt.ylabel('delta qir')
+    plt.title('z = 1 - z = 0.19')
+    plt.savefig('plots/delta_qir_1_19.pdf')
+    plt.show()
+
+    
+def delv_plt(df):
+    
+    df2 = pd.read_csv('Delvecchio_data.csv')
+    print(df2)
+    i = 0
+    z = 0
+    q = 0
+    h = 0
+    g = 0
+    mlst = [8,9,9.5,10,10.5,11,12]
+    fig, axs = plt.subplots(2, 3)
+    for i in range(6):
+        m = mlst[i]
+        n = mlst[i+1]
+        qir_bress_median_lst = []
+        qir_median_lst = []
+        qir_bress_low_lst = []
+        qir_bress_high_lst = []
+        qir_low_lst = []
+        qir_high_lst = []
+        zlst = []
+        for z in zlist:
+            qir_bress_sf = df.loc[((df['mstars_tot'] > 10**(m)) & (df['mstars_tot'] < 10**(n))& (df['sfg/q'] == 'sf')&(df['z'] == z)),'qir_bress']
+            qir_bress = df.loc[((df['mstars_tot'] > 10**(m)) & (df['mstars_tot'] < 10**(n))&(df['z'] == z)),'qir_bress']
+            try:
+                qir_bress_low_lst.append(np.percentile(qir_bress_sf,16))
+                qir_bress_high_lst.append(np.percentile(qir_bress_sf,84))
+                qir_bress_median_lst.append(np.median(qir_bress_sf))
+                
+                qir_low_lst.append(np.percentile(qir_bress,16))
+                qir_high_lst.append(np.percentile(qir_bress,84))
+                qir_median_lst.append(np.median(qir_bress))
+            except:
+                qir_bress_low_lst.append(np.nan)
+                qir_bress_high_lst.append(np.nan)
+                qir_bress_median_lst.append(np.nan)
+            
+                qir_low_lst.append(np.nan)
+                qir_high_lst.append(np.nan)
+                qir_median_lst.append(np.nan)
+            
+        delv_df = df2[['qir_nondet','dqir_nondet','qir_all','dqir_all','zmean']] [((df2['mass_min'] == m) & (df2['mass_max'] == n)) ]          
+        qir_nondet = delv_df['qir_nondet']
+        qir_nondet_err = delv_df['dqir_nondet']
+        qir_all = delv_df['qir_all']
+        qir_all_err = delv_df['dqir_all']
+        z_delv = delv_df['zmean']
+        titlst = ['$10^{8}$< M/$M_\odot$ < $10^{9}$','$10^{9}$< M/$M_\odot$ < $10^{9.5}$','$10^{9.5}$< M/$M_\odot$ < $10^{10}$','$10^{10}$< M/$M_\odot$ < $10^{10.5}$','$10^{10.5}$< M/$M_\odot$ < $10^{11}$','$10^{11}$< M/$M_\odot$ < $10^{12}$']
+
+        
+        
+        
+        g = q//3
+        h = q%3
+        q +=1
+        axs[g, h].plot(zlist,qir_bress_median_lst,color = 'red')
+        axs[g, h].fill_between(zlist,qir_bress_low_lst,qir_bress_high_lst,alpha = 0.2, color= 'red',label = 'SFG')
+        axs[g, h].plot(zlist,qir_median_lst,color = 'blue')
+        axs[g, h].fill_between(zlist,qir_low_lst,qir_high_lst,alpha = 0.2, color= 'blue',label= 'All Galaxies')
+        
+        axs[g, h].errorbar(z_delv, qir_all, yerr=qir_all_err, fmt="o",label = 'Average individual detetections and stacked non-detections')
+        axs[g, h].errorbar(z_delv, qir_nondet, yerr=qir_nondet_err, fmt="o",label = 'Stacks undetections')
+        axs[g, h].set_ylim([0,4])
+        axs[g, h].set_xlim([0,5])
+        axs[g, h].set_title(titlst[i],fontsize = 12.5)
+        for ax in axs.flat:
+            ax.set(xlabel='z', ylabel='qir')
+            ax.label_outer()
+    plt.subplots_adjust(wspace=0, hspace=0)
+    leg = axs[1,2].legend(loc='lower right', bbox_to_anchor=(0, 0))
     leg.get_frame().set_linewidth(0.0)
     fig.set_size_inches(12, 8)
+    plt.savefig("plots/delv_plt.pdf")
+    plt.show()
 
-    plt.savefig("Plots/rad_lum_func_multi_z.pdf")
-    plt.show()
+def ir_rad_qir_m(df,h):
+  #  mpl.rcParams['text.usetex'] = True
+  #  mpl.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}'] #for \text command
+    import matplotlib.colors as colors    
+    ###defining colourmaps###
+    cmap1 = colors.LinearSegmentedColormap.from_list("", ["darkred","lightgrey","darkblue"])
+    cmap2 = colors.LinearSegmentedColormap.from_list("", ["salmon","lightgrey","cornflowerblue"])
+    cmap3 = colors.LinearSegmentedColormap.from_list("", ["darkorange","lightgrey","cornflowerblue"])   
+    
+    
+    cmap4 = colors.LinearSegmentedColormap.from_list("", ["green","lightgrey","darkmagenta"])
+    cmap5 = colors.LinearSegmentedColormap.from_list("", ["lawngreen","lightgrey","violet"])
+    cmap6 = colors.LinearSegmentedColormap.from_list("", ["teal","lightgrey","crimson"])    
+    
+    fig, ax = plt.subplots(1,2)
+    
+    q = 0
+    ###Reads in the data from the dataframe
+    df2 = df[['qir_bress','mstars_tot','fir_lum','rad_lum']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e9)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)) ]
+    df_line = pd.DataFrame()
+    qir = df2['qir_bress']
+    mst = np.log10(df2['mstars_tot'])
+    fir = np.log10(df2['fir_lum'])
+    fim = fir - mst
+    rad = np.log10(df2['rad_lum'])
+    ram = rad - mst
+    
+    fmed = np.median(fim)
+    rmed = np.median(ram)
+    
+    fif = fim - fmed
+    rif = ram - rmed
+    
+    for i in range(50):
+        print("ir_med is = ", fmed)
+        print("ir_med is = ", rmed)    
+    
+    
+    ###Creates the median lines
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    df_line['mid_mst'] = mid_m
+    df_line['med_qir'] = med_qir
+    df_line['low_qir'] = low_qir
+    df_line['upp_qir'] = high_qir
+    
+    parm_lst = [fif,rif]
+    clab_lst = [r'$\rm \Delta L_{IR} [L_{\odot}/M_{\odot}]$',r'$\rm \Delta L_{rad,1.4GHz} [L_{\odot}/M_{\odot}]$']
+#r'$\rm \Delta L_{rad} [L_{\odot}/M_{\odot}]$'
+
+    df_hex = pd.DataFrame()
+    q = 0
+    vmin_lst = [-1,-0.5]
+    vmax_lst = [1,0.5]
+    
+ #   light_lir_cmap = cmocean.tools.lighten(cmo.amp, 0.75)
+ #   lighter_lir_cmap = cmocean.tools.lighten(cmo.amp, 0.5)    
+
+ #   light_rad_cmap = cmocean.tools.lighten(cmo.haline, 0.75)
+#    lighter_rad_cmap = cmocean.tools.lighten(cmo.haline, 0.5)    
+    
+    cmap_lst = [cmocean.cm.amp,cmocean.cm.haline]
+
+    df_hex = pd.DataFrame()
+    
+    med_lst = ['median = ' + str(round(fmed,3)),'median = ' + str(round(rmed,3))]
+    
+
+    for q in range(2):
+        parm = parm_lst[q]
+        clab = clab_lst[q]
+        cmap = cmap_lst[q]
+        vmin = vmin_lst[q]
+        vmax = vmax_lst[q]
+        med = med_lst[q]
+        print("THis is clab")
+        print(clab)
+        c = ax[q].hexbin(mst,qir,C = parm,cmap = cmap,mincnt = 500, gridsize = 30,vmin = vmin, vmax = vmax)
+        ax[q].plot(mid_m,med_qir,'black')
+        ax[q].plot(mid_m,low_qir,'black',linestyle='dashed')   
+        ax[q].plot(mid_m,high_qir,'black',linestyle='dashed')
+        ax[q].set_xlabel("$\\rm log_{10}(M_{*}/[M_\odot]$)",fontsize = 20)
+        ax[0].set_ylabel('$\\rm q_{IR}$',fontsize = 20)
+        cb = fig.colorbar(c,ax=ax[q],location='top',pad=0)
+        ax[q].text(8.5,4.1,clab,fontsize = 20,ha = 'center')   
         
-def qir_hist(df):
+        parm_lab = str(parm) + '_hex'
+        
+        offsets = c.get_offsets()
+        arr = c.get_array()
+        df_hex['mst_hex'] = pd.Series(offsets[:,0])
+        df_hex['qir_hex'] = pd.Series(offsets[:,1])
+        df_hex[parm_lab] = pd.Series(arr)
+     #   ax[q].text(8.8,0.5,med)
+        
+    plt.subplots_adjust(wspace=0, hspace=0)
+    print(df_line)
+    fig.set_size_inches(12, 6)
+    plt.tight_layout()   
+    plt.savefig('plots/qir_m_ir_rad.pdf')
+    plt.show()
+
     
-    qir = df['qir_bress']
-    med = 'median = ' + str(np.median(qir))
-    length = 'number count = ' + str(len(qir))
-    plt.hist(qir)
-    plt.text(-2,1,med)
-    plt.text(-2,10000,length)
-    plt.text(-2,20000,'plots_pawsey')
-    plt.title('qir')
-    plt.savefig("qir_hist_plots_pawsey.pdf")
+def lir_bc_ism(df,h):
+    import matplotlib.colors as colors   
+
+    df2 = df[['mgas_metals_disk','mgas_disk','gas_metal','fir_lum','sfr','mstars_tot','mstars_disk','gas_metal','sfr','lir_disk','sfr_disk','rstar_disk','lir_bc_disk','lir_ism_disk']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e10)) ]  
+
+    
+    mmd = df2['mgas_metals_disk']
+    mgd = df2['mgas_disk']
+    print(mmd)
+    print(mgd)
+    rdk = np.log10(df2['rstar_disk']/h)
+    zgm = np.log10(mmd/mgd/0.018)     #mass if metals in the disk
+    #df['mgas'] = (df['mgas_disk']+ df['mgas_bulge']) /h0
+    ##df['sfr'] = (df['sfr_disk'] + df['sfr_burst'])/ 1e9 / h0  
+    #df['gas_metal'] = ((df['mgas_metals_bulge']+df['mgas_metals_disk'])/(df['mgas'])*h0)/0.018    
+  #  mst = np.log10(df2['mstars_tot']) #total stellar mass of the galaxies
+    lir = np.log10(df2['lir_bc_disk'])    
+    
+    
+    
+   # zgm = np.log10(df2['gas_metal'])
+  #  msd = np.log10(df2['mstars_disk']/h) #stellar mass of the disk
+  #  mst = np.log10(df2['mstars_tot']) #total stellar mass of the galaxies
+   # lir = np.log10(df2['lir_disk'])
+    sfr = np.log10(df2['sfr_disk']/1e9/h)
+    mgd = np.log10(df2['mgas_metals_disk']/h)
+    sfr_lir = sfr - lir
+   # gsd = np.log10(df2['gas_surf_dens'])
+   # gsd_med = np.median(gsd)
+   # del_gsd = gsd - gsd_med
+    
+    rdk_med = np.median(rdk)
+    del_rdk = rdk - rdk_med
+    
+    print("tHis is zgm")
+    
+    print(zgm)
+    print("THis is sfr_lir")
+    print(sfr_lir)
+    
+    mid_zgm,med_sir,low_sir,upp_sir = median_line(zgm,sfr_lir,False,False)
+    fig, ax = plt.subplots(1,1)    
+    c = ax.hexbin(zgm,sfr_lir,cmap = cmocean.cm.dense,mincnt = 10, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10))
+    #c = ax.hexbin(zgm,sfr_lir,C = mgd,cmap = cmocean.cm.dense,mincnt = 10, gridsize = 30,reduce_C_function=np.median)
+    ax.plot(mid_zgm,med_sir,'black')
+    ax.plot(mid_zgm,low_sir,'black',linestyle='dashed')   
+    ax.plot(mid_zgm,upp_sir,'black',linestyle='dashed')
+    ax.set_xlabel("$\\rm Z_{gas,disk}/[M_{\odot}]$",fontsize = 20)
+    ax.set_ylabel('$\\rm log_{10}(SFR_{disk}/L_{IR,bc,disk} [Some units])$',fontsize = 20)
+    
+    cb = fig.colorbar(c,ax=ax, location = 'top',pad=0)
+    cb.set_label('Number Count',fontsize = 20)
+    
+    fig.set_size_inches(6, 6)
+    plt.tight_layout()   
+    plt.savefig('plots/sfr_lir_bc_zgas.pdf')
     plt.show()
     
-    plt.hist(np.log10(df['freefree']))
-    plt.title('freefree')
+    
+    
+    
+    mmd = df2['mgas_metals_disk']
+    mgd = df2['mgas_disk']
+    print(mmd)
+    print(mgd)
+    rdk = np.log10(df2['rstar_disk']/h)
+    zgm = np.log10(mmd/mgd/0.018)     #mass if metals in the disk
+    #df['mgas'] = (df['mgas_disk']+ df['mgas_bulge']) /h0
+    ##df['sfr'] = (df['sfr_disk'] + df['sfr_burst'])/ 1e9 / h0  
+    #df['gas_metal'] = ((df['mgas_metals_bulge']+df['mgas_metals_disk'])/(df['mgas'])*h0)/0.018    
+  #  mst = np.log10(df2['mstars_tot']) #total stellar mass of the galaxies
+    lir = np.log10(df2['lir_ism_disk'])
+    print("This is lir_ism_disk")
+    print(lir)
+    
+    
+    
+   # zgm = np.log10(df2['gas_metal'])
+  #  msd = np.log10(df2['mstars_disk']/h) #stellar mass of the disk
+  #  mst = np.log10(df2['mstars_tot']) #total stellar mass of the galaxies
+    #lir = np.log10(df2['lir_disk'])
+    sfr = np.log10(df2['sfr_disk']/1e9/h)
+    mgd = np.log10(df2['mgas_metals_disk']/h)
+    sfr_lir = sfr - lir
+   # gsd = np.log10(df2['gas_surf_dens'])
+   # gsd_med = np.median(gsd)
+   # del_gsd = gsd - gsd_med
+    
+    rdk_med = np.median(rdk)
+    del_rdk = rdk - rdk_med
+    
+    print("tHis is zgm")
+    
+    print(zgm)
+    print("THis is sfr_lir")
+    print(sfr_lir)
+    plt.clf()
+    mid_zgm,med_sir,low_sir,upp_sir = median_line(zgm,sfr_lir,False,False)
+    fig, ax = plt.subplots(1,1)
+    c = ax.hexbin(zgm,sfr_lir,cmap = cmocean.cm.dense,mincnt = 10, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10))
+    #c = ax.hexbin(zgm,sfr_lir,C = mgd,cmap = cmocean.cm.dense,mincnt = 10, gridsize = 30,reduce_C_function=np.median)
+    ax.plot(mid_zgm,med_sir,'black')
+    ax.plot(mid_zgm,low_sir,'black',linestyle='dashed')   
+    ax.plot(mid_zgm,upp_sir,'black',linestyle='dashed')
+    ax.set_xlabel("$\\rm Z_{gas,disk}/[M_{\odot}]$",fontsize = 20)
+    ax.set_ylabel('$\\rm log_{10}(SFR_{disk}/L_{IR,ism,disk} [Some units])$',fontsize = 20)
+    
+    cb = fig.colorbar(c,ax=ax, location = 'top',pad=0)
+    cb.set_label('Number Count',fontsize = 20)
+    
+    fig.set_size_inches(6, 6)
+    plt.tight_layout()   
+    plt.savefig('plots/sfr_lir_ism_zgas.pdf')
     plt.show()
     
-    plt.hist(np.log10(df['sync']))
-    plt.title('sync')
+    
+def sfr_lir_zgas(df,h):
+    import matplotlib.colors as colors        
+    fig, ax = plt.subplots(1,1)
+
+    df2 = df[['mgas_metals_disk','mgas_disk','gas_metal','fir_lum','sfr','mstars_tot','mstars_disk','gas_metal','sfr','lir_disk','sfr_disk','rstar_disk','gas_surf_dens']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e10)) ]     
+    mmd = df2['mgas_metals_disk']
+    mgd = df2['mgas_disk']
+    print(mmd)
+    print(mgd)
+    rdk = np.log10(df2['rstar_disk']/h)
+    zgm = np.log10(mmd/mgd/0.018)     #mass if metals in the disk
+    df['mgas'] = (df['mgas_disk']+ df['mgas_bulge']) /h0
+    df['sfr'] = (df['sfr_disk'] + df['sfr_burst'])/ 1e9 / h0  
+    df['gas_metal'] = ((df['mgas_metals_bulge']+df['mgas_metals_disk'])/(df['mgas'])*h0)/0.018    
+    
+   # zgm = np.log10(df2['gas_metal'])
+  #  msd = np.log10(df2['mstars_disk']/h) #stellar mass of the disk
+  #  mst = np.log10(df2['mstars_tot']) #total stellar mass of the galaxies
+    lir = np.log10(df2['lir_disk'])
+    sfr = np.log10(df2['sfr_disk']/1e9/h)
+    mgd = np.log10(df2['mgas_metals_disk']/h)
+    sfr_lir = sfr - lir
+    gsd = np.log10(df2['gas_surf_dens'])
+    gsd_med = np.median(gsd)
+    del_gsd = gsd - gsd_med
+    
+    rdk_med = np.median(rdk)
+    del_rdk = rdk - rdk_med
+    
+    print("tHis is zgm")
+    
+    print(zgm)
+    print("THis is sfr_lir")
+    print(sfr_lir)
+    
+    mid_zgm,med_sir,low_sir,upp_sir = median_line(zgm,sfr_lir,False,False)
+    fig, ax = plt.subplots(1,1)    
+    #c = ax.hexbin(zgm,sfr_lir,C = rdk,cmap = cmocean.cm.dense,mincnt = 10, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10))
+    c = ax.hexbin(zgm,sfr_lir,C = mgd,cmap = cmocean.cm.dense,mincnt = 10, gridsize = 30,reduce_C_function=np.median)
+    ax.plot(mid_zgm,med_sir,'black')
+    ax.plot(mid_zgm,low_sir,'black',linestyle='dashed')   
+    ax.plot(mid_zgm,upp_sir,'black',linestyle='dashed')
+    ax.set_xlabel("$\\rm Z_{gas,disk}/[M_{\odot}]$",fontsize = 20)
+    ax.set_ylabel('$\\rm log_{10}(SFR_{disk}/L_{IR,disk} [Some units])$',fontsize = 20)
+    
+    cb = fig.colorbar(c,ax=ax, location = 'top',pad=0)
+    cb.set_label('mgas_metals_disk',fontsize = 20)
+    
+    fig.set_size_inches(6, 6)
+    plt.tight_layout()   
+    plt.savefig('plots/sfr_lir_zgas')
     plt.show()
     
-    plt.hist(df['sfr'])
-    plt.title('sfr')
+    
+    
+    
+    
+def zgas_m(df,h):
+    import matplotlib.colors as colors    
+    fig, ax = plt.subplots(1,1)
+
+    df2 = df[['mstars_tot','mstars_disk','mgas_metals_disk','mgas_disk','gas_metal','sfr']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e9)) ]      
+    
+    zgm = np.log10(df2['mgas_metals_disk']/(df2['mgas_disk'])/0.018)  #mass of metals in disk
+    zgm = np.log10(df2['gas_metal'])
+    msd = np.log10(df2['mstars_disk']/h) #stellar mass of the disk
+    mst = np.log10(df2['mstars_tot']) #total stellar mass of the galaxies
+    
+    mid_m,med_zgm,low_zgm,high_zgm = median_line(mst,zgm,False,False)
+    
+    c = ax.hexbin(mst,zgm,cmap = cmocean.cm.dense,mincnt = 500, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10))
+    ax.plot(mid_m,med_zgm,'black')
+    ax.plot(mid_m,low_zgm,'black',linestyle='dashed')   
+    ax.plot(mid_m,high_zgm,'black',linestyle='dashed')
+    ax.set_xlabel("$\\rm log_{10}(M_{*}/[M_\odot]$)",fontsize = 20)
+    ax.set_ylabel('$\\rm Z_{gas,disk}/[M_{\odot}]$',fontsize = 20)
+    
+    cb = fig.colorbar(c,ax=ax, location = 'top',pad=0)
+    cb.set_label('Number Count',fontsize = 20)
+    
+    fig.set_size_inches(6, 6)
+    plt.tight_layout()   
+    plt.savefig('plots/zgas_mst.pdf')
     plt.show()
+    
+    plt.clf()
+
+    msd[msd < 7.5] = np.nan
+
+
+    fig, ax = plt.subplots(1,1)    
+    mid_m,med_zgm,low_zgm,high_zgm = median_line(msd,zgm,False,False)
+    
+    c = ax.hexbin(msd,zgm,cmap = cmocean.cm.dense, mincnt = 500,gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10))
+    ax.plot(mid_m,med_zgm,'black')
+    ax.plot(mid_m,low_zgm,'black',linestyle='dashed')   
+    ax.plot(mid_m,high_zgm,'black',linestyle='dashed')
+    ax.set_xlabel("$\\rm log_{10}(M_{*,disk}/[M_\odot]$)",fontsize = 20)
+    ax.set_ylabel('$\\rm Z_{gas,disk}/[M_{\odot}]$',fontsize = 20)
+    
+    cb = fig.colorbar(c,ax=ax, location = 'top',pad = 0)
+    cb.set_label('Number Count',fontsize = 20)
+    
+    fig.set_size_inches(6, 6)
+    plt.tight_layout()   
+    plt.savefig('plots/zgas_msd.pdf')
+    plt.show()
+    
+    plt.clf()
+    
+def extinct_qir_disk(df,h):
+    import matplotlib.colors as colors    
+    fig, ax = plt.subplots(1,1)
+
+    df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas','qir_disk','qir_bulge','sfr_burst','lir_bulge','rad_bulge','mgas_metals_disk','mgas_disk']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e9)& (df['qir_disk'] < 3.3)& (df['qir_disk'] > 0)) ]   
+
+    qir = df2['qir_disk']
+    mst = np.log10(df2['mstars_tot'])
+    tef = df2['teff']
+    gzd = df2['mgas_metals_disk']/(df2['mgas_disk'])/0.018 #gas metals in the disk
+    
+    
+    
+    fir = np.log10(df2['lir_bulge'])
+    fim = fir - mst
+    rad = np.log10(df2['rad_bulge'])
+    ram = rad - mst
+    
+    fmed = np.median(fim)
+    rmed = np.median(ram)
+    
+    fif = fim - fmed
+    rif = ram - rmed
+    ###Creates the median lines
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    parm_lst = [tef,gzd]
+   # parm_lst = [tef,hmr,sfr,sbf,gsd,sfd]
+    clab_lst = ['$\\rm log_{10}(T_{eff}/[K])$','$\\rm log_{10}(Z_{gas}/[Z_\odot]$)']
+    vmin_lst = [30,-1.5]
+    vmax_lst = [50,-1.0]
+    cmap_lst = [cmocean.cm.thermal,cmocean.cm.speed,cmocean.cm.solar,cmocean.cm.deep,cmocean.cm.matter,cmocean.cm.algae]
+
+    plt.clf()
+    
+    fig, ax = plt.subplots(1,2)
+    for q in range(2):
+        #h = q//2
+        #g = q%2
+        parm = parm_lst[q]
+        clab = clab_lst[q]
+        cmap = cmap_lst[q]
+        vmin = vmin_lst[q]
+        vmax = vmax_lst[q]
+        c = ax[q].hexbin(mst,qir,C = parm,cmap = cmap,mincnt = 10, gridsize = 30)
+        ax[q].plot(mid_m,med_qir,'black')
+        ax[q].plot(mid_m,low_qir,'black',linestyle='dashed')   
+        ax[q].plot(mid_m,high_qir,'black',linestyle='dashed')
+        ax[q].set_xlabel('$\\rm log_{10}(M_{*}/[M_\odot]$)',fontsize = 20)
+        ax[q].set_ylabel('$\\rm q_{IR,disk}$',fontsize = 20)
+        cb = fig.colorbar(c,ax=ax[q], location = 'top',pad=0)
+        ax[q].text(8.5,4.1,clab,fontsize = 20,ha = 'center')   
+        #cb.set_label(clab,fontsize = 20)
+
+
+        
+    #plt.subplots_adjust(wspace=0, hspace=0)
+    fig.set_size_inches(12,6)
+   # plt.tight_layout()   
+    plt.savefig('plots/extinct_qir_m_disk.pdf')
+    plt.show()
+
+    
+    
+    
+def extinct_qir_m(df,h):
+    import matplotlib.colors as colors    
+
+    fig, ax = plt.subplots(1,1)
+    df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas','qir_disk','qir_bulge']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e12)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)) ]   
+    qir = df2['qir_bress']
+    mst = np.log10(df2['mstars_tot'])
+
+    c = ax.hexbin(mst,qir,mincnt = 10, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10),cmap = cmocean.cm.dense)
+    
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    
+    ax.plot(mid_m,med_qir,'black')
+    ax.plot(mid_m,low_qir,'black',linestyle='dashed')   
+    ax.plot(mid_m,high_qir,'black',linestyle='dashed')
+    ax.set_ylabel('qir',fontsize = 20)
+    cb = fig.colorbar(c,location = 'top',pad = 0)
+    #cb.set_label('Number Count',fontsize = 20)   
+    ax.text(10,4.1,'Number Count',fontsize = 20,ha = 'center')   
+    ax.set_xlabel("$\\rm log_{10}(M_{*}/[M_\odot])$",fontsize = 20)
+    ax.set_ylabel("$\\rm q_{IR}$",fontsize = 20)
+    leg = ax.legend(frameon=False,loc='lower right')
+    leg.get_frame().set_linewidth(0.0)
+    fig.set_size_inches(8, 8)
+    plt.show()
+    plt.savefig("plots/qir_numbercount.pdf")
+    
+    plt.clf()
+    
+    fig, ax = plt.subplots(2,2)
+    
+    q = 0
+    ###Reads in the data from the dataframe
+    df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','sfr_burst','gas_metal','sfr_disk','type']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e9)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)) ]
+    df_line = pd.DataFrame()
+    qir = df2['qir_bress']
+    mst = np.log10(df2['mstars_tot'])
+    tef = df2['teff']
+    zgs = np.log10(df2['gas_metal'])
+    sfd = np.log10(df2['sfr_disk']/h)
+    
+    typ = df2['type']
+    
+    
+    
+    
+    
+    ###Creates the median lines
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    df_line['mid_mst'] = mid_m
+    df_line['med_qir'] = med_qir
+    df_line['low_qir'] = low_qir
+    df_line['upp_qir'] = high_qir
+    
+    parm_lst = [tef,zgs,sfd]
+    clab_lst = ['$\\rm (T_{eff}/[K]$','$\\rm log_{10}(Z_{gas}/[Z_\odot]$)','$\\rm SFR_{disk}$']
+    vmin_lst = [30,-1.5,0.9]
+    vmax_lst = [50,-1.0,1.0]
+    cmap_lst = [cmocean.cm.thermal,cmocean.cm.speed,cmocean.cm.solar,cmocean.cm.deep,cmocean.cm.matter,cmocean.cm.algae]
+    mincnt = 500
+    df_hex = pd.DataFrame()
+
+    for q in range(3):
+        h = q//2
+        g = q%2
+        print("This is g,h")
+        print(g,h)
+        parm = parm_lst[q]
+        clab = clab_lst[q]
+        cmap = cmap_lst[q]
+        vmin = vmin_lst[q]
+        vmax = vmax_lst[q]
+        c = ax[g,h].hexbin(mst,qir,C = parm,cmap = cmap,mincnt = mincnt, gridsize = 30,reduce_C_function=np.median,vmin = vmin, vmax = vmax)
+        ax[g,h].plot(mid_m,med_qir,'black')
+        ax[g,h].plot(mid_m,low_qir,'black',linestyle='dashed')   
+        ax[g,h].plot(mid_m,high_qir,'black',linestyle='dashed')
+        ax[1,0].set_xlabel('$\\rm log_{10}(M_{*}/[M_\odot]$)',fontsize = 20)
+        ax[g,0].set_ylabel('$\\rm q_{IR}$',fontsize = 20)
+        cb = fig.colorbar(c,ax=ax[g,h],pad=0.0,location = 'top')
+        #ax[g,h].text(8.5,4.2,clab,fontsize = 20,ha = 'center')
+        
+        parm_lab = str(parm) + '_hex'
+        
+        offsets = c.get_offsets()
+        arr = c.get_array()
+        df_hex['mst_hex'] = pd.Series(offsets[:,0])
+        df_hex['qir_hex'] = pd.Series(offsets[:,1])
+        df_hex[parm_lab] = pd.Series(arr)
+        
+    ax[0,0].text(8.5,4.1,clab_lst[0],fontsize = 20,ha = 'center')    
+    ax[1,0].text(8.5,4.1,clab_lst[1],fontsize = 20,ha = 'center')   
+    ax[0,1].text(8.5,4.2,clab_lst[2],fontsize = 20,ha = 'center')
+    c = ax[1,1].hexbin(mst,qir,C = typ,cmap = cmocean.cm.matter,mincnt = mincnt, gridsize = 30,reduce_C_function=central_counter,vmin = 0, vmax = 1)
+    ax[1,1].plot(mid_m,med_qir,'black')
+    ax[1,1].plot(mid_m,low_qir,'black',linestyle='dashed')   
+    ax[1,1].plot(mid_m,high_qir,'black',linestyle='dashed')
+    ax[1,1].set_xlabel('$\\rm log_{10}(M_{*}/[M_\odot]$)',fontsize = 20)
+    cb = fig.colorbar(c,ax=ax[1,1],location = 'top',pad=0)
+  #  cb.set_label('Central Fraction',fontsize = 20,labelpad=0.5)
+    ax[1,1].text(8.5,4.1,'Central Fraction',fontsize = 20,ha = 'center')
+
+
+        
+    plt.subplots_adjust(wspace=0, hspace=0)
+    print(df_line)
+    fig.set_size_inches(12, 12)
+    plt.tight_layout()   
+    plt.savefig('plots/extinct_qir_m_four.pdf')
+    plt.show()
+    
+def extinct_qir_m_2(df,h):
+    import matplotlib.colors as colors    
+
+    fig, ax = plt.subplots(1,1)
+    df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas','qir_disk','qir_bulge']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e12)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)&(df['teff']>40)) ]   
+    qir = df2['qir_bress']
+    mst = np.log10(df2['mstars_tot'])
+    
+    print(qir)
+    print(mst)
+
+    c = ax.hexbin(mst,qir,mincnt = 10, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10),cmap = cmocean.cm.dense)
+    
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    
+    ax.plot(mid_m,med_qir,'black')
+    ax.plot(mid_m,low_qir,'black',linestyle='dashed')   
+    ax.plot(mid_m,high_qir,'black',linestyle='dashed')
+    ax.set_ylabel('qir',fontsize = 20)
+    cb = fig.colorbar(c,location = 'top',pad = 0)
+    #cb.set_label('Number Count',fontsize = 20)   
+    ax.text(10,4.1,'Number Count',fontsize = 20,ha = 'center')   
+    ax.set_xlabel("$\\rm log_{10}(M_{*}/[M_\odot])$",fontsize = 20)
+    ax.set_ylabel("$\\rm q_{IR}$",fontsize = 20)
+    leg = ax.legend(frameon=False,loc='lower right')
+    leg.get_frame().set_linewidth(0.0)
+    fig.set_size_inches(8, 8)
+    plt.show()
+    plt.savefig("plots/qir_numbercount_teff_40.pdf")
+    
+    plt.clf()
+    
+    fig, ax = plt.subplots(2,2)
+    
+    q = 0
+    ###Reads in the data from the dataframe
+    df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas','qir_disk','qir_bulge']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e12)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)&(df['teff']>40)) ]   
+    df_line = pd.DataFrame()
+    qir = df2['qir_bress']
+    mst = np.log10(df2['mstars_tot'])
+    tef = df2['teff']
+    zgs = np.log10(df2['gas_metal'])
+    sfd = np.log10(df2['sfr_disk']/h)
+    
+    typ = df2['type']
+    
+    
+    
+    
+    
+    ###Creates the median lines
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    df_line['mid_mst'] = mid_m
+    df_line['med_qir'] = med_qir
+    df_line['low_qir'] = low_qir
+    df_line['upp_qir'] = high_qir
+    
+    parm_lst = [tef,zgs,sfd]
+    clab_lst = ['$\\rm (T_{eff}/[K]$','$\\rm log_{10}(Z_{gas}/[Z_\odot]$)','$\\rm SFR_{disk}$']
+    vmin_lst = [30,-1.5,0.9]
+    vmax_lst = [50,-1.0,1.0]
+    cmap_lst = [cmocean.cm.thermal,cmocean.cm.speed,cmocean.cm.solar,cmocean.cm.deep,cmocean.cm.matter,cmocean.cm.algae]
+    mincnt = 500
+    df_hex = pd.DataFrame()
+
+    for q in range(3):
+        h = q//2
+        g = q%2
+        print("This is g,h")
+        print(g,h)
+        parm = parm_lst[q]
+        clab = clab_lst[q]
+        cmap = cmap_lst[q]
+        vmin = vmin_lst[q]
+        vmax = vmax_lst[q]
+        c = ax[g,h].hexbin(mst,qir,C = parm,cmap = cmap,mincnt = mincnt, gridsize = 30,reduce_C_function=np.median,vmin = vmin, vmax = vmax)
+        ax[g,h].plot(mid_m,med_qir,'black')
+        ax[g,h].plot(mid_m,low_qir,'black',linestyle='dashed')   
+        ax[g,h].plot(mid_m,high_qir,'black',linestyle='dashed')
+        ax[1,0].set_xlabel('$\\rm log_{10}(M_{*}/[M_\odot]$)',fontsize = 20)
+        ax[g,0].set_ylabel('$\\rm q_{IR}$',fontsize = 20)
+        cb = fig.colorbar(c,ax=ax[g,h],pad=0.0,location = 'top')
+        #ax[g,h].text(8.5,4.2,clab,fontsize = 20,ha = 'center')
+        
+        parm_lab = str(parm) + '_hex'
+        
+        offsets = c.get_offsets()
+        arr = c.get_array()
+        df_hex['mst_hex'] = pd.Series(offsets[:,0])
+        df_hex['qir_hex'] = pd.Series(offsets[:,1])
+        df_hex[parm_lab] = pd.Series(arr)
+        
+    ax[0,0].text(8.5,4.1,clab_lst[0],fontsize = 20,ha = 'center')    
+    ax[1,0].text(8.5,4.1,clab_lst[1],fontsize = 20,ha = 'center')   
+    ax[0,1].text(8.5,4.2,clab_lst[2],fontsize = 20,ha = 'center')
+    c = ax[1,1].hexbin(mst,qir,C = typ,cmap = cmocean.cm.matter,mincnt = mincnt, gridsize = 30,reduce_C_function=central_counter,vmin = 0, vmax = 1)
+    ax[1,1].plot(mid_m,med_qir,'black')
+    ax[1,1].plot(mid_m,low_qir,'black',linestyle='dashed')   
+    ax[1,1].plot(mid_m,high_qir,'black',linestyle='dashed')
+    ax[1,1].set_xlabel('$\\rm log_{10}(M_{*}/[M_\odot]$)',fontsize = 20)
+    cb = fig.colorbar(c,ax=ax[1,1],location = 'top',pad=0)
+  #  cb.set_label('Central Fraction',fontsize = 20,labelpad=0.5)
+    ax[1,1].text(8.5,4.1,'Central Fraction',fontsize = 20,ha = 'center')
+
+
+        
+    plt.subplots_adjust(wspace=0, hspace=0)
+    print(df_line)
+    fig.set_size_inches(12, 12)
+    plt.tight_layout()   
+    plt.savefig('plots/extinct_qir_m_four_teff_40.pdf')
+    plt.show() 
+    
+    
+    
+    fig, ax = plt.subplots(1,1)
+    df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas','qir_disk','qir_bulge']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e12)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)&(df['teff']<35)) ]   
+    qir = df2['qir_bress']
+    mst = np.log10(df2['mstars_tot'])
+
+    c = ax.hexbin(mst,qir,mincnt = 10, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10),cmap = cmocean.cm.dense)
+    
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    
+    ax.plot(mid_m,med_qir,'black')
+    ax.plot(mid_m,low_qir,'black',linestyle='dashed')   
+    ax.plot(mid_m,high_qir,'black',linestyle='dashed')
+    ax.set_ylabel('qir',fontsize = 20)
+    cb = fig.colorbar(c,location = 'top',pad = 0)
+    #cb.set_label('Number Count',fontsize = 20)   
+    ax.text(10,4.1,'Number Count',fontsize = 20,ha = 'center')   
+    ax.set_xlabel("$\\rm log_{10}(M_{*}/[M_\odot])$",fontsize = 20)
+    ax.set_ylabel("$\\rm q_{IR}$",fontsize = 20)
+    leg = ax.legend(frameon=False,loc='lower right')
+    leg.get_frame().set_linewidth(0.0)
+    fig.set_size_inches(8, 8)
+    plt.show()
+    plt.savefig("plots/qir_numbercount_teff_35.pdf")
+    
+    plt.clf()
+    
+    fig, ax = plt.subplots(2,2)
+    
+    q = 0
+    ###Reads in the data from the dataframe
+    df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas','qir_disk','qir_bulge']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e12)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)&(df['teff']<35)) ]   
+    df_line = pd.DataFrame()
+    qir = df2['qir_bress']
+    mst = np.log10(df2['mstars_tot'])
+    tef = df2['teff']
+    zgs = np.log10(df2['gas_metal'])
+    sfd = np.log10(df2['sfr_disk']/h)
+    
+    typ = df2['type']
+    
+    
+    
+    
+    
+    ###Creates the median lines
+    mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+    
+    df_line['mid_mst'] = mid_m
+    df_line['med_qir'] = med_qir
+    df_line['low_qir'] = low_qir
+    df_line['upp_qir'] = high_qir
+    
+    parm_lst = [tef,zgs,sfd]
+    clab_lst = ['$\\rm (T_{eff}/[K]$','$\\rm log_{10}(Z_{gas}/[Z_\odot]$)','$\\rm SFR_{disk}$']
+    vmin_lst = [30,-1.5,0.9]
+    vmax_lst = [50,-1.0,1.0]
+    cmap_lst = [cmocean.cm.thermal,cmocean.cm.speed,cmocean.cm.solar,cmocean.cm.deep,cmocean.cm.matter,cmocean.cm.algae]
+    mincnt = 500
+    df_hex = pd.DataFrame()
+
+    for q in range(3):
+        h = q//2
+        g = q%2
+        print("This is g,h")
+        print(g,h)
+        parm = parm_lst[q]
+        clab = clab_lst[q]
+        cmap = cmap_lst[q]
+        vmin = vmin_lst[q]
+        vmax = vmax_lst[q]
+        c = ax[g,h].hexbin(mst,qir,C = parm,cmap = cmap,mincnt = mincnt, gridsize = 30,reduce_C_function=np.median,vmin = vmin, vmax = vmax)
+        ax[g,h].plot(mid_m,med_qir,'black')
+        ax[g,h].plot(mid_m,low_qir,'black',linestyle='dashed')   
+        ax[g,h].plot(mid_m,high_qir,'black',linestyle='dashed')
+        ax[1,0].set_xlabel('$\\rm log_{10}(M_{*}/[M_\odot]$)',fontsize = 20)
+        ax[g,0].set_ylabel('$\\rm q_{IR}$',fontsize = 20)
+        cb = fig.colorbar(c,ax=ax[g,h],pad=0.0,location = 'top')
+        #ax[g,h].text(8.5,4.2,clab,fontsize = 20,ha = 'center')
+        
+        parm_lab = str(parm) + '_hex'
+        
+        offsets = c.get_offsets()
+        arr = c.get_array()
+        df_hex['mst_hex'] = pd.Series(offsets[:,0])
+        df_hex['qir_hex'] = pd.Series(offsets[:,1])
+        df_hex[parm_lab] = pd.Series(arr)
+        
+    ax[0,0].text(8.5,4.1,clab_lst[0],fontsize = 20,ha = 'center')    
+    ax[1,0].text(8.5,4.1,clab_lst[1],fontsize = 20,ha = 'center')   
+    ax[0,1].text(8.5,4.2,clab_lst[2],fontsize = 20,ha = 'center')
+    c = ax[1,1].hexbin(mst,qir,C = typ,cmap = cmocean.cm.matter,mincnt = mincnt, gridsize = 30,reduce_C_function=central_counter,vmin = 0, vmax = 1)
+    ax[1,1].plot(mid_m,med_qir,'black')
+    ax[1,1].plot(mid_m,low_qir,'black',linestyle='dashed')   
+    ax[1,1].plot(mid_m,high_qir,'black',linestyle='dashed')
+    ax[1,1].set_xlabel('$\\rm log_{10}(M_{*}/[M_\odot]$)',fontsize = 20)
+    cb = fig.colorbar(c,ax=ax[1,1],location = 'top',pad=0)
+  #  cb.set_label('Central Fraction',fontsize = 20,labelpad=0.5)
+    ax[1,1].text(8.5,4.1,'Central Fraction',fontsize = 20,ha = 'center')
+
+
+        
+    plt.subplots_adjust(wspace=0, hspace=0)
+    print(df_line)
+    fig.set_size_inches(12, 12)
+    plt.tight_layout()   
+    plt.savefig('plots/extinct_qir_m_four_teff_35.pdf')
+    plt.show() 
+    
+def extinct_qir_m_z(df,h):
+    import matplotlib.colors as colors    
+    ###defining colourmaps###
+    cmap1 = matplotlib.colors.LinearSegmentedColormap.from_list("", ["red","lightgrey","blue"])
+    cmap2 = matplotlib.colors.LinearSegmentedColormap.from_list("", ["yellow","lightgrey","magenta"])
+    cmap3 = matplotlib.colors.LinearSegmentedColormap.from_list("", ["darkgreen","lightgrey","indigo"])
+    cmap4 = matplotlib.colors.LinearSegmentedColormap.from_list("", ["orange","lightgrey","darkblue"])
+    cmap5 = matplotlib.colors.LinearSegmentedColormap.from_list("", ["maroon","lightgrey","olive"])
+    cmap6 = matplotlib.colors.LinearSegmentedColormap.from_list("", ["orangered","lightgrey","cyan"])
+    
+    fig, ax = plt.subplots(1,1)
+    
+    for z in zlist:
+        df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas']] [((df['z'] == z) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e12)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)) ]   
+        qir = df2['qir_bress']
+        mst = np.log10(df2['mstars_tot'])
+        c = ax.hexbin(mst,qir,mincnt = 100, gridsize = 30,norm=colors.SymLogNorm(linthresh=0.03, linscale=0.03, vmin=1e0, vmax=1e4, base=10),cmap = cmocean.cm.dense)
+
+        mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+
+
+        ax.plot(mid_m,med_qir,'black')
+        ax.plot(mid_m,low_qir,'black',linestyle='dashed')   
+        ax.plot(mid_m,high_qir,'black',linestyle='dashed')
+        ax.set_ylabel('qir',fontsize = 20)
+        cb = fig.colorbar(c)
+        cb.set_label('Number Count',fontsize = 20)    
+        ax.set_xlabel("$M_{*}/[M_\odot]$",fontsize = 20)
+        ax.set_ylabel("qir",fontsize = 20)
+        leg = ax.legend(frameon=False,loc='lower right')
+        leg.get_frame().set_linewidth(0.0)
+        fig.set_size_inches(8, 8)
+        plt.show()
+        save_name = "plots/qir_numbercount_z" + str(round(z)) + ".pdf"
+        plt.savefig(save_name)
+
+    plt.clf()
+    
+    for z in zlist:
+        fig, ax = plt.subplots(3,2)
+
+        q = 0
+
+
+        ###Reads in the data from the dataframe
+        df2 = df[['qir_bress','mstars_tot','teff','rstar_disk','gas_surf_dens','sfr','mgas']] [((df['z'] == 0) & (df['mstars_tot'] > 1e8)& (df['mstars_tot'] < 1e12)& (df['qir_bress'] < 3.3)& (df['qir_bress'] > 0)) ]
+        df_line = pd.DataFrame()
+        qir = df2['qir_bress']
+        mst = np.log10(df2['mstars_tot'])
+        tef = df2['teff']
+        hmr = np.log10(df2['rstar_disk']/h)
+        gas = np.log10(df2['mgas']) - mst
+        gsd = np.log10(df2['gas_surf_dens'])
+        sfr = np.log10(df2['sfr']) - mst
+        sfd = np.log10((df2['sfr']/(2*np.pi*(df2['rstar_disk']/h)**2)))
+
+        ###Creates the median lines
+        mid_m,med_qir,low_qir,high_qir = median_line(mst,qir,False,False)
+
+        df_line['mid_mst'] = mid_m
+        df_line['med_qir'] = med_qir
+        df_line['low_qir'] = low_qir
+        df_line['upp_qir'] = high_qir
+
+        parm_lst = [tef,hmr,sfr,gas,gsd,sfd]
+        clab_lst = ['Log$_{10}(T_{eff}/[K])$','Log$_{10}(r_{0.5mass}/[kpc])$','Log$_{10}$(sSFR/[$yr^{-1}$])','Log$_{10}(M_{gas}/M_{*})$','Log$_{10}(\Sigma_{gas}/[M_\odot/M^{2}$])','Log$_{10}(\Sigma_{SFR}/[M_{\odot}yr^{-1}kpc^{-2}]])$']
+        vmin_lst = [1,30,-3.5,12,-5,-8]
+        vmax_lst = [4,50,-2.5,15,1,3]
+        cmap_lst = [cmocean.cm.thermal,cmocean.cm.speed,cmocean.cm.solar,cmocean.cm.deep,cmocean.cm.matter,cmocean.cm.algae]
+
+        df_hex = pd.DataFrame()
+
+        for q in range(6):
+            h = q//3
+            g = q%3
+            print("This is g,h")
+            print(g,h)
+            parm = parm_lst[q]
+            clab = clab_lst[q]
+            cmap = cmap_lst[q]
+            vmin = vmin_lst[q]
+            vmax = vmax_lst[q]
+            c = ax[g,h].hexbin(mst,qir,C = parm,cmap = cmap,mincnt = 100, gridsize = 30)
+            ax[g,h].plot(mid_m,med_qir,'black')
+            ax[g,h].plot(mid_m,low_qir,'black',linestyle='dashed')   
+            ax[g,h].plot(mid_m,high_qir,'black',linestyle='dashed')
+            ax[1,h].set_xlabel("$Log_{10}$(M_{*}/$M_\odot$)",fontsize = 20)
+            ax[g,0].set_ylabel('qir',fontsize = 20)
+            cb = fig.colorbar(c,ax=ax[g,h])
+            cb.set_label(clab,fontsize = 20)
+
+            parm_lab = str(parm) + '_hex'
+
+            offsets = c.get_offsets()
+            arr = c.get_array()
+            df_hex['mst_hex'] = pd.Series(offsets[:,0])
+            df_hex['qir_hex'] = pd.Series(offsets[:,1])
+            df_hex[parm_lab] = pd.Series(arr)
+
+
+        #plt.subplots_adjust(wspace=0, hspace=0)
+        print(df_line)
+        fig.set_size_inches(12, 12)
+        plt.tight_layout()   
+        save_name = 'plots/extinct_qir_m_z_' + str(z) + ".pdf"
+        plt.savefig(save_name)
+        plt.show()
+     
+
+    
+    
+def qir_m_z(df):
+    
+    fig, ax = plt.subplots(2, 3)
+    #zlst = [0, 0.194738848008908, 0.909822023685613, 2.00391410007239, 3.0191633709527, 3.95972701662501]
+    zlst = [0, 0.194738848008908]
+    q = 0
+    for z in zlst:
+        g = q//3
+        h = q%3
+        qir = df.loc[((df['z'] == z)&(df['mstars_tot'] > 1e8)&(df['sfg/q'] == 'sf')&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 3.2 )&(df['qir_bress'] > -2)),'qir_bress']
+        mstar = np.log10(df.loc[((df['z'] == z)&(df['mstars_tot'] > 1e8)&(df['sfg/q'] == 'sf')&(df['mstars_tot'] < 1e12)&(df['qir_bress'] <3.2 )&(df['qir_bress'] > -2)),'mstars_tot'])
+        z_label = 'z = ' + str(round(z,2))
+        n_gal = 'n = ' + str(len(qir))
+        mid_mstar_lst,med_qir_lst,low_1_qir_lst,high_1_qir_lst,low_2_qir_lst,high_2_qir_lst,low_3_qir_lst,high_3_qir_lst = med_sig_lines(mstar,qir,False,False)
+        c = ax[g,h].hexbin(mstar,qir,cmap = 'rainbow',mincnt = 10, gridsize = 30,vmin = 10, vmax = 1000)
+        ax[g,h].plot(mid_mstar_lst,med_qir_lst,'black')
+        ax[g,h].plot(mid_mstar_lst,low_1_qir_lst,'black',linestyle = 'dashed')
+        ax[g,h].plot(mid_mstar_lst,high_1_qir_lst,'black',linestyle = 'dashed')
+        ax[g,h].plot(mid_mstar_lst,low_2_qir_lst,'black',linestyle = 'dotted')
+        ax[g,h].plot(mid_mstar_lst,high_2_qir_lst,'black',linestyle = 'dotted')
+        ax[g,h].plot(mid_mstar_lst,low_3_qir_lst,'black',linestyle = 'dashdot')
+        ax[g,h].plot(mid_mstar_lst,high_3_qir_lst,'black',linestyle = 'dashdot')
+
+        ax[g, 0].set_ylabel("qir")
+        ax[1, h].set_xlabel("log$_{10}$ M$_{\odot}$")
+        ax[g, h].text(10,0,z_label)
+        ax[g,h].text(10,-1,n_gal)
+        ax[1, h].tick_params(bottom = True, top = True)
+        ax[0, h].tick_params(labelbottom=False) 
+        ax[g, 1].tick_params(labelleft=False) 
+        ax[g, 2].tick_params(labelleft=False)
+        ax[g,h].set_xlim(8,12)
+        ax[g,h].set_ylim(-2,3.2)
+        q += 1
+        
+    
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    cb = fig.colorbar(c, cax=cbar_ax)
+    cb.set_label('Number Count')
+    plt.subplots_adjust(wspace=0, hspace=0)
+    fig.set_size_inches(12, 8)
+    plt.savefig("plots/qir_m_z.pdf")
+    plt.show()
+    
+    
+    fig, ax = plt.subplots(2, 3)
+   # zlst = [0, 0.194738848008908, 0.909822023685613, 2.00391410007239, 3.0191633709527, 3.95972701662501]
+   # zlst = [0, 0.194738848008908]
+    q = 0
+    for z in zlst:
+        g = q//3
+        h = q%3
+        fir = np.log10(df.loc[((df['z'] == z)&(df['mstars_tot'] > 1e8)&(df['sfg/q'] == 'sf')&(df['mstars_tot'] < 1e12)&(df['qir_bress'] < 3.2 )&(df['qir_bress'] > -2)),'lir_w'])
+        rad = np.log10(df.loc[((df['z'] == z)&(df['mstars_tot'] > 1e8)&(df['sfg/q'] == 'sf')&(df['mstars_tot'] < 1e12)&(df['qir_bress'] <3.2 )&(df['qir_bress'] > -2)),'bress_rad_lum'])
+        z_label = 'z = ' + str(round(z,2))
+        mid_mstar_lst,med_qir_lst,low_1_qir_lst,high_1_qir_lst,low_2_qir_lst,high_2_qir_lst,low_3_qir_lst,high_3_qir_lst = med_sig_lines(rad,fir,False,False)
+        c = ax[g,h].hexbin(rad,fir,cmap = 'rainbow',mincnt = 10, gridsize = 30,vmin = 10, vmax = 10000)
+        ax[g,h].plot(mid_mstar_lst,med_qir_lst,'black')
+        ax[g,h].plot(mid_mstar_lst,low_1_qir_lst,'black',linestyle = 'dashed')
+        ax[g,h].plot(mid_mstar_lst,high_1_qir_lst,'black',linestyle = 'dashed')
+        ax[g,h].plot(mid_mstar_lst,low_2_qir_lst,'black',linestyle = 'dotted')
+        ax[g,h].plot(mid_mstar_lst,high_2_qir_lst,'black',linestyle = 'dotted')
+        ax[g,h].plot(mid_mstar_lst,low_3_qir_lst,'black',linestyle = 'dashdot')
+        ax[g,h].plot(mid_mstar_lst,high_3_qir_lst,'black',linestyle = 'dashdot')
+
+        ax[g, 0].set_ylabel("log$_{10}$ Lir/W")
+        ax[1, h].set_xlabel("log$_{10}$ Lrad/W")
+        ax[g, h].text(19.5,37,z_label)
+        ax[1, h].tick_params(bottom = True, top = True)
+        ax[0, h].tick_params(labelbottom=False) 
+        ax[g, 1].tick_params(labelleft=False) 
+        ax[g, 2].tick_params(labelleft=False)
+        ax[g,h].set_xlim(19,22)
+        ax[g,h].set_ylim(30,38)
+        q += 1
+    
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    cb = fig.colorbar(c, cax=cbar_ax)
+    cb.set_label('Number Count')
+    plt.subplots_adjust(wspace=0, hspace=0)
+    fig.set_size_inches(12, 8)
+    plt.savefig('plots/lir_lrad_z.pdf')
+    plt.show()
+
 
 def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zlist):
     Lsunwatts = 3.846e26
@@ -1873,6 +2964,9 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
     freefree_lst = []
     sync_lst = []
     ion_phot_lst = []
+    
+    rad_disk_lum = []
+    rad_bulge_lum = []
     
     IncludeSelfAbsorption = False
     
@@ -1893,6 +2987,8 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
         ind0 = np.where(np.asarray(mdisk) + np.asarray(mbulge) > 0)
         ms = (mdisk[ind0] + mbulge[ind0])/h0 #in Msun
         sfr_tot = (sfr_tot[ind0])/h0/1e9
+        sfr_disk = (sfr_disk[ind0])/h0/1e9
+        sfr_bulge = (sfr_bulge[ind0])/h0/1e9        
         #ionising mag
         lir_total = np.array(lir_total_W_lst[z], dtype=np.float64)
        # ind109 = np.where(lir_total > 10**7 * Lsun)
@@ -1905,6 +3001,10 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
         lir_total = lir_total[ind108]
         ms = ms[ind108]
         sfr_tot= sfr_tot[ind108]
+        
+        sfr_disk = sfr_disk[ind108]
+        sfr_bulge = sfr_bulge[ind108]
+        
         r_gas_disk_array = r_gas_disk_array[ind0]
         r_gas_disk_array = r_gas_disk_array[ind108]
         
@@ -1928,6 +3028,8 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
             l = (rgas_disk/h/c_speed)*1e6 #distance in pc
             
             tau = 8.2 * 10**(-2) * T**(-1.35) * nu**(-2.1) * (ne**2 * l)
+            
+            tau = T**(-1.35)*(nu/1.4)**(-2.1) * EM/6e6
             
             return tau
 
@@ -1958,12 +3060,12 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
 
         def synchrotron_lum(SFR, nu):
 
-
+            nu_mw = 0.011148*1.0 #Assumes MW SFR of 1.0
             LNT = 6.1*10**(-2)*(1.49/0.408)**(-0.8) ##2.16 x10^(-2) W/Hz/10^(21)
-            ENT = LNT/0.0163 ##1.31 x 10^(23) W/Hz/10^(21)
+            ENT = LNT/nu_mw ##1.31 x 10^(23) W/Hz/10^(21)
             ESNR = ENT * 0.06 ##0.0784 x 10^(23)W/Hz/10^(21)
             EEI = 0.94*ENT ##1.23 x 10^(23) W/Hz/10^(21)
-            alpha = 0.815661
+            alpha =  0.815661
 
             comp1 = ESNR * (nu / 1.49)**(-0.5) + (EEI * (nu / 1.49)**(-alpha))
             nuSNCC = SFR * 0.011148
@@ -1991,9 +3093,14 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
         lum_radio = np.zeros(shape = (len(selection_freq), len(q_ionis)), dtype=np.float64)
         freefree = np.zeros(shape = (len(selection_freq), len(q_ionis)), dtype=np.float64)
         sync = np.zeros(shape = (len(selection_freq), len(q_ionis)), dtype=np.float64)
+        
+        lum_rad_disk = np.zeros(shape = (len(selection_freq), len(q_ionis)), dtype=np.float64)
+        lum_rad_bulge = np.zeros(shape = (len(selection_freq), len(q_ionis)), dtype=np.float64)
+        
         for i, nu in enumerate(selection_freq):
             lum_radio[i,:] = freefree_lum(q_ionis[:], nu) + synchrotron_lum(sfr_tot[:], nu)
-
+            lum_rad_disk[i,:] = freefree_lum(q_ionis[:], nu) + synchrotron_lum(sfr_disk[:], nu)
+            lum_rad_bulge[i,:] = freefree_lum(q_ionis[:], nu) + synchrotron_lum(sfr_bulge[:], nu)
             freefree[i,:] = freefree_lum(q_ionis[:], nu)/1e7
             
             sync[i,:] = synchrotron_lum(sfr_tot[:], nu)/1e7
@@ -2014,6 +3121,10 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
         bress_lir_total.append(np.median(lir_total[notinf_lst]))
         
         
+        rad_disk_lum.append(lum_rad_disk[3]/1e7)
+        rad_bulge_lum.append(lum_rad_bulge[3]/1e7)
+        
+
 
         
         freefree_lst.append(freefree[3])
@@ -2022,9 +3133,67 @@ def bressan_model(seds_bands_lst,seds_lir_lst,hdf5_lir_lst,lir_total_W_lst,h0,zl
             
         ion_phot_lst.append(q_ionis)
     
-    return qir_lst, qir_bress, bress_rad_lum, bress_lir_total, freefree_lst, sync_lst, ion_phot_lst
+    return qir_lst, qir_bress, bress_rad_lum, bress_lir_total, freefree_lst, sync_lst, ion_phot_lst,rad_disk_lum,rad_bulge_lum
     
 def median_line(xlist,ylist,xlog,ylog):
+
+
+
+    med_y_lst = []
+    low_y_lst = []
+    high_y_lst = []
+    mid_x_lst = []
+
+
+
+    if xlog == True:
+        xlist = np.log10(np.array(xlist))
+    else:
+        xlist = np.array(xlist)
+
+    if ylog == True:
+        ylist = np.log10(np.array(ylist))
+    else:
+        ylist = np.array(ylist)
+
+    xbin_lst = list(np.arange(min(xlist),max(xlist),(max(xlist)-min(xlist))/30))
+
+
+
+    for i in range(len(xbin_lst)-1):
+        m = xbin_lst[i]
+        n = xbin_lst[i+1]
+
+        x_bins = np.where(((xlist > m)&(xlist < n)))
+
+
+        y_bins = ylist[x_bins]
+
+        if len(y_bins) > 9:
+
+            med_y = np.median(y_bins)
+            med_y_lst.append(med_y)
+            mid_x = (n/2+m/2)
+            mid_x_lst.append(mid_x)
+            low_y_lst.append(np.percentile(y_bins,16))
+            high_y_lst.append(np.percentile(y_bins,84))
+        
+        else:
+            mid_x_lst.append(np.nan)
+            med_y_lst.append(np.nan)
+            low_y_lst.append(np.nan)
+            high_y_lst.append(np.nan)
+            continue
+    if ylog == True:
+        med_y_lst = 10**np.array(med_y_lst)
+        low_y_lst = 10**np.array(low_y_lst)
+        high_y_lst = 10**np.array(high_y_lst)
+    if xlog == True:
+        mid_x_lst = 10**np.array(mid_x_lst)
+
+    return np.array(mid_x_lst),np.array(med_y_lst),np.array(low_y_lst),np.array(high_y_lst)
+
+def any_sigma_lines(xlist,ylist,xlog,ylog,sig_up,sig_down):
 
 
 
@@ -2063,8 +3232,8 @@ def median_line(xlist,ylist,xlog,ylog):
         mid_x = (n/2+m/2)
         mid_x_lst.append(mid_x)
         try:
-            low_y_lst.append(np.percentile(y_bins,16))
-            high_y_lst.append(np.percentile(y_bins,84))
+            low_y_lst.append(np.percentile(y_bins,sig_down))
+            high_y_lst.append(np.percentile(y_bins,sig_up))
         except:
             low_y_lst.append(np.nan)
             high_y_lst.append(np.nan)
@@ -2078,18 +3247,75 @@ def median_line(xlist,ylist,xlog,ylog):
 
     return mid_x_lst,med_y_lst,low_y_lst,high_y_lst
 
+def med_sig_lines(xlist,ylist,xlog,ylog):
+
+
+
+    med_y_lst = []
+    low_1_y_lst = []
+    high_1_y_lst = []
+    low_2_y_lst = []
+    high_2_y_lst = []
+    low_3_y_lst = []
+    high_3_y_lst = []
+    mid_x_lst = []
+
+
+
+    if xlog == True:
+        xlist = np.log10(np.array(xlist))
+    else:
+        xlist = np.array(xlist)
+
+    if ylog == True:
+        ylist = np.log10(np.array(ylist))
+    else:
+        ylist = np.array(ylist)
+
+    xbin_lst = list(np.arange(min(xlist),max(xlist),(max(xlist)-min(xlist))/30))
+
+
+    for i in range(len(xbin_lst)-1):
+        m = xbin_lst[i]
+        n = xbin_lst[i+1]
+
+        x_bins = np.where(((xlist > m)&(xlist < n)))
+
+
+        y_bins = ylist[x_bins]
+
+
+        med_y = np.median(y_bins)
+        med_y_lst.append(med_y)
+        mid_x = (n/2+m/2)
+        mid_x_lst.append(mid_x)
+        try:
+            low_1_y_lst.append(np.percentile(y_bins,16))
+            high_1_y_lst.append(np.percentile(y_bins,84))
+            low_2_y_lst.append(np.percentile(y_bins,2.5))
+            high_2_y_lst.append(np.percentile(y_bins,97.5))
+            low_3_y_lst.append(np.percentile(y_bins,0.5))
+            high_3_y_lst.append(np.percentile(y_bins,99.5))
+        except:
+            low_1_y_lst.append(np.nan)
+            high_1_y_lst.append(np.nan)
+            low_2_y_lst.append(np.nan)
+            high_2_y_lst.append(np.nan)
+            low_3_y_lst.append(np.nan)
+            high_3_y_lst.append(np.nan)
+            continue
+    if ylog == True:
+        med_y_lst = 10**np.array(med_y_lst)
+        low_y_lst = 10**np.array(low_y_lst)
+        high_y_lst = 10**np.array(high_y_lst)
+    if xlog == True:
+        mid_x_lst = 10**np.array(mid_x_lst)
+
+    return mid_x_lst,med_y_lst,low_1_y_lst,high_1_y_lst,low_2_y_lst,high_2_y_lst,low_3_y_lst,high_3_y_lst
+
 
 def main(model_dir, outdir, redshift_table, subvols, obsdir):
-    print("This is model_dir")
-    print(model_dir)
-    print("This is outdir")
-    print(outdir)
-    print("This is redshift_table")
-    print(redshift_table)
-    print('This is subvols')
-    print(subvols)
-    print("This is obsdir")
-    print(obsdir)
+
 
     plt = common.load_matplotlib()
 
@@ -2103,7 +3329,7 @@ def main(model_dir, outdir, redshift_table, subvols, obsdir):
 
   #  fields = {'galaxies': ('mstars_disk', 'mstars_bulge','sfr_disk', 'sfr_burst','type','mgas_metals_bulge', 'mgas_metals_disk')}
 
-    fields = {'galaxies': ('mstars_disk','mstars_bulge','sfr_disk','sfr_burst','type','mgas_metals_bulge','mgas_metals_disk','mgas_bulge','mgas_disk','rgas_disk','rstar_disk','id_galaxy','matom_disk','mgas_metals_disk','mmol_disk')}
+    fields = {'galaxies': ('mstars_disk','mstars_bulge','sfr_disk','sfr_burst','type','mgas_metals_bulge','mgas_metals_disk','mgas_bulge','mgas_disk','rgas_disk','rstar_disk','matom_disk','mmol_disk','id_galaxy')}
     
     
     #Bands information:
@@ -2136,6 +3362,14 @@ def main(model_dir, outdir, redshift_table, subvols, obsdir):
     
     lir_total_W_lst = []
     
+    lir_disk_w_lst = []
+    
+    lir_bulge_w_lst = []
+    
+    lir_bc_disk_lst = []
+    
+    lir_ism_disk_lst = []
+    
     Teff_lst = []
     for index, snapshot in enumerate(redshift_table[zlist]):
         print("Will read snapshot %s" % (str(snapshot)))
@@ -2151,7 +3385,7 @@ def main(model_dir, outdir, redshift_table, subvols, obsdir):
         
         seds_bands = common.read_photometry_data_variable_tau_screen(model_dir, snapshot, fields_seds_dust, subvols, file_hdf5_sed)
 
-        (volh, h0, band_14, band_30, lir_total_W,Teff) = prepare_data(hdf5_data, seds_lir, seds_bands, seds_lir_bc, index, LFs_dust, obsdir)
+        (volh, h0, band_14, band_30, lir_total_W,Teff,lir_disk_w,lir_bulge_w,lir_bc_disk,lir_ism_disk) = prepare_data(hdf5_data, seds_lir, seds_bands, seds_lir_bc, index, LFs_dust, obsdir)
         
         seds_nodust_lst.append(seds_nodust)
         
@@ -2167,12 +3401,28 @@ def main(model_dir, outdir, redshift_table, subvols, obsdir):
         
         Teff_lst.append(Teff)
         
+        lir_disk_w_lst.append(lir_disk_w)
         
+        lir_bulge_w_lst.append(lir_bulge_w)
+        
+        lir_bc_disk_lst.append(lir_bc_disk)
     
+        lir_ism_disk_lst.append(lir_ism_disk)
+
+        
+    start_time = time.time()
+    
+    print("THis is lir_bc_disk_lst")
+    print(lir_bc_disk_lst)
+    
+    print(len(lir_bc_disk_lst))
+    
+    df = dataframe(hdf5_lir_lst,zlist,seds_bands_lst,seds_lir_lst,lir_total_W_lst,seds_nodust_lst,h0,Teff_lst,fields,lir_disk_w_lst,lir_bulge_w_lst,lir_bc_disk_lst,lir_ism_disk_lst)
+    print('df2 takes:')
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 
-  
-    df,sf_lst = dataframe(hdf5_lir_lst,zlist,seds_bands_lst,seds_lir_lst,lir_total_W_lst,seds_nodust_lst,h0,Teff_lst)
+
   #  rad_size(df)
  #   density(df)
   #  qir_z_plt(df)
@@ -2201,22 +3451,39 @@ def main(model_dir, outdir, redshift_table, subvols, obsdir):
     #derived_SFR(df)
     
    # qir_v_dust_ff_sync(df)       
-  #  lo_faro_plots(df)
+    #lo_faro_plots(df)
    # qir_hist(df)
-    #GAMA_plots(df)
+   # GAMA_plots(df)
+    #GAMA_plots_old(df)
   #  GAMA_flux_limit(df)
    # met_dist_cent(df)
-  #  sfr_function(df,h0,volh)
+   # sfr_function(df,h0,volh)
    # qir_plots(df)
    # all_galaxies_gas_disks(df)
    # SFR_z(df)
    # ionising_phot_sfr(df)
-    rad_lum_func_plt_z0(df,h0,volh)
+  #  rad_lum_func_plt_z0(df,h0,volh)
   #  all_galaxies_gas_disks(df)
-    rad_lum_func_z(df,h0,volh)
+   # rad_lum_func_z(df,h0,volh)
 #    sf_galaxies_gas_disks(df)
-
- #   rad_lum_func_plt_z0(df,h0,volh)
+#    delv_plt(df)
+ #   qir_m_z(df)
+    #qir_mstar_ulirgs(df)
+   # sfr_m_hex(df)
+   # delv_plt(df)
+    #delta_qir(df)
+   # extinct_qir_m(df,h0)
+   #extinct_qir_m(df,h0)
+ #   extinct_qir_disk_bulge(df,h0)
+  #  qir_mstar(df)
+   # GAMA_plots(df)    
+   # lir_bc_ism(df,h0)    
+    extinct_qir_m_2(df,h0) 
+    #extinct_qir_m(df,h0)
+   # ir_rad_qir_m(df,h0)
+    #extinct_qir_disk(df,h0)
+   # zgas_m(df,h0)
+   # sfr_lir_zgas(df,h0)
     mstars_disk = hdf5_data[2]
     mstars_bulge = hdf5_data[3]
     mstars_tot = []
